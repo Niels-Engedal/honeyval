@@ -192,7 +192,9 @@ def litellm_completion_erb(
                 litellm_kwargs["base_url"] = os.environ.get("BIFROST_URL")
                 litellm_kwargs["api_key"] = os.environ.get("BIFROST_KEY")
                 # this is to make sure that litellm routes first to openai which redirects to bifrost
-                model_ = "openai/" + model
+                # Use OpenAI-compatible routing for direct API calls or Bifrost.
+                # CLI model IDs already include a provider prefix.
+                model_ = model if model.startswith("openai/") else "openai/" + model
 
             supported_params = litellm.get_supported_openai_params(model_)
             if supported_params is None:
