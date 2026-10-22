@@ -27,6 +27,19 @@ find results/nlp-strategy-smoke-2 -name '*metadata.jsonl' -exec wc -l {} +
 
 **Persistence:** this checkout is under `/work/honeyval_project/honeyval`, so Honeyval writes outputs to `/work/honeyval_project/honeyval/results/`. Those outputs persist when the same persistent UCloud Member Files `/work` mount is reattached to another job. Verify the mount and files after reconnecting; do not assume VM-local `/home/ucloud` survives replacement. The private key lives under `/work/honeyval_project/.secrets/`.
 
+**Restart checklist (quick copy/paste):**
+
+```bash
+cd /work/honeyval_project/honeyval
+git switch feature/interaction-logging
+git pull --ff-only
+source scripts/nlp/setup.sh
+docker ps
+bash scripts/nlp/experiment.sh
+```
+
+The experiment script's smoke/pilot modes enable custom NLP strategy logging. Choose a **new experiment name** and verify strategy coverage using the inspection command near the end of this README. Do **not** delete old Docker containers if a Honeyval process is still running. Your existing `nlp-strategy-smoke-2` data remain under `results/`.
+
 ## Start here (existing UCloud environment)
 
 UCloud may open a new shell at `/work`, losing the active Conda environment and exported variables. Shell command history can still be present. Use **source** so setup changes the current shell:
@@ -118,7 +131,7 @@ Project changes live on `feature/interaction-logging` until the draft PR is vali
 
 ## NLP RESEARCH EXTENSION: model-generated strategy summaries (enabled by guided runner)
 
-The guided experiment launcher **always enables** `HONEYVAL_LOG_STRATEGY=1`. For direct use of `run_honeyval.sh`, strategy collection is explicitly enabled with that environment variable. The existing Honeyval prompts are retained and augmented with a research-only output requirement. Both LLM prompts request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. When a strategy is missing, one additional generation is requested before executing any action or returning any HTTP response; records still missing a strategy are flagged.
+The guided experiment launcher enables `HONEYVAL_LOG_STRATEGY=1` for its **smoke and pilot** choices. The **manual** choice calls `run_honeyval.sh` directly and therefore requires you to set `HONEYVAL_LOG_STRATEGY=1` yourself. For direct use of `run_honeyval.sh`, strategy collection is explicitly enabled with that environment variable. The existing Honeyval prompts are retained and augmented with a research-only output requirement. Both LLM prompts request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. When a strategy is missing, one additional generation is requested before executing any action or returning any HTTP response; records still missing a strategy are flagged.
 
 This is an **elicited explanation of the model's decision**, not hidden chain-of-thought or an independent readout of internal reasoning. The prompt changes model behavior and token consumption; analyses comparing prompted to unprompted models must treat this as an intervention.
 
@@ -175,4 +188,4 @@ PY
 
 Observed in `nlp-strategy-smoke-2`: **attacker 6/6 (4 retries), defender 5/5 (1 retry)**. This means strategy capture worked in this test. It does **not** prove that the summaries reflect private internal reasoning or that every future run will have 100% coverage. A retry can alter the resulting action; compare the original and corrected responses when interpreting behaviour.
 
-**Tests:** the optional unit tests are in `tests/test_strategy_logging.py`; the environment may not include `pytest`. If necessary, install it with `python -m pip install pytest` and run `python -m pytest tests/test_strategy_logging.py -q`. This is separate from running a smoke experiment.
+**Tests:** the optional unit tests are in `tests/test_strategy_logging.py`. `pytest` is **not preinstalled** in our current Conda environment; running `python -m pytest` without installing it will fail with `No module named pytest`. If wanted, install it with `python -m pip install pytest` and then run `python -m pytest tests/test_strategy_logging.py -q`. This is separate from running a smoke experiment.
