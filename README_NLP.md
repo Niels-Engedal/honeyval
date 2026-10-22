@@ -2,7 +2,30 @@
 
 Our fork of [Google Research Honeyval](https://github.com/google-research/honeyval) logs attacker and defender interactions for the NLP project. It uses direct OpenAI API access; **Bifrost is not required**. The original README contains the framework's full CLI documentation.
 
-**Working baseline (22 October 2026):** the `Login` smoke test completed with zero task errors, six attacker JSONL events and six defender JSONL events. The attacker did not succeed (which is fine for a smoke test). A 10-sample pilot was started but its final outcome wasn't provided.
+**Verified (22 October 2026):** the strategy-enabled `nlp-strategy-smoke-2` smoke run completed with six attacker decisions and five defender decisions, all with recorded strategies. Four attacker decisions and one defender decision required one correction generation. This verifies one pilot trajectory, not reliability across many runs.
+
+## Tomorrow: restart the existing UCloud VM and continue
+
+1. Start the **same VM** from UCloud and reconnect with **VS Code Remote SSH** (use its UCloud Access / SSH connection details). Starting a different, fresh VM may require reinstalling Miniconda, Docker, and Docker images.
+2. Open a VS Code terminal and run:
+
+```bash
+cd /work/honeyval_project/honeyval
+git switch feature/interaction-logging
+git pull --ff-only
+source scripts/nlp/setup.sh
+```
+
+3. Confirm the terminal reports `Conda: honeyval`, `OpenAI API key: loaded`, and `Python Docker connection: OK`. To verify the saved pilot data:
+
+```bash
+find results/nlp-strategy-smoke-2 -name '*metadata.jsonl' -exec wc -l {} +
+```
+
+4. Before another experiment check `pgrep -af '[p]ython.*src/main.py'` and `docker ps`. Old Honeyval containers may survive reconnects or interrupted runs. Do not remove containers used by an active run. For long experiments use `tmux` inside the VS Code SSH terminal so disconnecting SSH does not end the shell session; tmux cannot survive rebooting the VM.
+5. Run `bash scripts/nlp/experiment.sh`, choose smoke or pilot, and **use a fresh experiment name**. Each API run incurs costs.
+
+**Persistence:** this checkout is under `/work/honeyval_project/honeyval`, so Honeyval writes outputs to `/work/honeyval_project/honeyval/results/`. Those outputs persist when the same persistent UCloud Member Files `/work` mount is reattached to another job. Verify the mount and files after reconnecting; do not assume VM-local `/home/ucloud` survives replacement. The private key lives under `/work/honeyval_project/.secrets/`.
 
 ## Start here (existing UCloud environment)
 
@@ -74,7 +97,7 @@ The launcher only sources the private key and invokes Honeyval's `src/main.py`. 
 
 ## Results and troubleshooting
 
-Results are under `results/<experiment-name>/<configuration>/<app>/<sample>/agent-vs-http-app/`. Most useful files:
+Results are under `results/<experiment-name>/<configuration>/<app>/<sample>/agent-vs-http-app/` in the repository on `/work`. Most useful files:
 
 - `logs/agent.log` — attacker actions and observations
 - `logs/http-app.log` — honeypot HTTP/backend activity
@@ -93,9 +116,9 @@ grep -R 'iptables insert failed' results/<experiment-name> --include='*.log' || 
 
 Project changes live on `feature/interaction-logging` until the draft PR is validated. Record the Git commit hash and experimental parameters when collecting data for analysis.
 
-## Optional model-generated strategy summaries
+## NLP RESEARCH EXTENSION: model-generated strategy summaries (enabled by guided runner)
 
-The guided experiment launcher enables `HONEYVAL_LOG_STRATEGY=1` by default. Both LLM prompts then request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. When a strategy is missing, one additional generation is requested before executing any action or returning any HTTP response; records still missing a strategy are flagged.
+The guided experiment launcher **always enables** `HONEYVAL_LOG_STRATEGY=1`. For direct use of `run_honeyval.sh`, strategy collection is explicitly enabled with that environment variable. The existing Honeyval prompts are retained and augmented with a research-only output requirement. Both LLM prompts request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. When a strategy is missing, one additional generation is requested before executing any action or returning any HTTP response; records still missing a strategy are flagged.
 
 This is an **elicited explanation of the model's decision**, not hidden chain-of-thought or an independent readout of internal reasoning. The prompt changes model behavior and token consumption; analyses comparing prompted to unprompted models must treat this as an intervention.
 
@@ -105,7 +128,7 @@ To make a run with strategy logging from the unmodified command-line launcher, p
 HONEYVAL_LOG_STRATEGY=1 bash scripts/nlp/run_honeyval.sh --mode run [your other arguments here]
 ```
 
-The `agent-metadata.jsonl` and `http-app-metadata.jsonl` records have timestamps, inputs/outputs, token fields, and the optional `strategy` statement. Align events by sample directory, chronological timestamps, and request content; **do not assume attacker and defender event counts are equal**, since an attacker action can produce zero or multiple HTTP requests. Check the rate of missing strategy fields before scaling up.
+The `agent-metadata.jsonl` and `http-app-metadata.jsonl` records have timestamps, inputs/outputs, token fields, and a `strategy` statement when successfully elicited. Align events by sample directory, chronological timestamps, and request content; **do not assume attacker and defender event counts are equal**, since an attacker action can produce zero or multiple HTTP requests. Check the rate of missing strategy fields before scaling up.
 
 ### NLP RESEARCH EXTENSION — NOT UPSTREAM HONEYVAL
 
@@ -124,3 +147,32 @@ include both model generations. A correction may change an action/response,
 which is a research intervention: compare the initial and final outputs in
 analyses. Exclude records with `strategy_valid=false` from strategy NLP.
 Lifecycle events START/END are not model decisions.
+
+## Inspect strategy completeness after any run
+
+Change the experiment name below, then run from the repository root:
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+
+root = Path("results/nlp-strategy-smoke-2")  # change to your run name
+for filename, role in [("agent-metadata.jsonl", "ATTACKER"),
+                       ("http-app-metadata.jsonl", "DEFENDER")]:
+    records = [json.loads(line) for file in root.rglob(filename)
+               for line in file.read_text().splitlines() if line.strip()]
+    decisions = [r for r in records if r.get("event") not in
+                 {"START", "END", "ERROR", "RATE_LIMIT_ERROR"}]
+    valid = sum(bool(r.get("strategy_valid")) for r in decisions)
+    retried = sum(bool(r.get("strategy_retried")) for r in decisions)
+    print(f"{role}: {valid}/{len(decisions)} strategies; {retried} retried")
+    for i, item in enumerate(decisions, 1):
+        if not item.get("strategy_valid"):
+            print(f"  MISSING: decision {i}, event={item.get('event')}")
+PY
+```
+
+Observed in `nlp-strategy-smoke-2`: **attacker 6/6 (4 retries), defender 5/5 (1 retry)**. This means strategy capture worked in this test. It does **not** prove that the summaries reflect private internal reasoning or that every future run will have 100% coverage. A retry can alter the resulting action; compare the original and corrected responses when interpreting behaviour.
+
+**Tests:** the optional unit tests are in `tests/test_strategy_logging.py`; the environment may not include `pytest`. If necessary, install it with `python -m pip install pytest` and run `python -m pytest tests/test_strategy_logging.py -q`. This is separate from running a smoke experiment.
