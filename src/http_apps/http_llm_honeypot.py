@@ -46,7 +46,7 @@ from src.utils.create_webapp import create_webapp
 from src.utils.docker_utils import build_image_if_needed
 from src.utils.judge import Judge
 from src.utils.litellm_erb import litellm_completion_erb
-from src.utils.strategy_logging import STRATEGY_PROMPT, extract_strategy, strategy_enabled
+from src.utils.strategy_logging import STRATEGY_PROMPT, collect_strategy, strategy_enabled
 from src.utils.logger import (
     Event,
     LogLevel,
@@ -141,8 +141,27 @@ def run_backend_worker(
         cache_write_tokens = usage["cache_creation_tokens"]
         logger.debug(f"Raw model response:\n{model_response_raw}")
         strategy = None
+        strategy_audit = {}
         if strategy_enabled():
-            model_response_raw, strategy = extract_strategy(model_response_raw)
+            # NLP RESEARCH EXTENSION: correction before HTTP output, no extra request.
+            def retry_strategy(prompt):
+                local_history.append({"role": "user", "content": prompt})
+                try:
+                    return litellm_completion_erb(
+                        tries=5, min_wait=1, max_wait=120, logger=logger,
+                        model=model_name, messages=local_history,
+                        temperature=temperature, reasoning_effort=reasoning_effort,
+                    )
+                finally:
+                    local_history.pop()
+
+            model_response_raw, strategy, usage, strategy_audit = collect_strategy(
+                model_response_raw, usage, retry_strategy
+            )
+            prompt_tokens = usage["input_tokens"]
+            completion_tokens = usage["output_tokens"]
+            cached_tokens = usage["cached_tokens"]
+            cache_write_tokens = usage["cache_creation_tokens"]
         parsed_response = _parse_response_static(model_response_raw)
         time_out = time()
         logger.info(f"Parsed model response:\n{parsed_response}")
@@ -163,6 +182,7 @@ def run_backend_worker(
                 "out": parsed_response.strip(),
                 "raw_response": model_response_raw,
                 "strategy": strategy,
+                **strategy_audit,
             }
         )
         if max_cost >= 0.0:
