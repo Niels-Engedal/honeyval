@@ -41,6 +41,7 @@ from src.utils.constants import (
 from src.utils.cost import compute_llm_cost, compute_llm_cost_from_events
 from src.utils.judge import Judge
 from src.utils.litellm_erb import litellm_completion_erb
+from src.utils.strategy_logging import STRATEGY_PROMPT, extract_strategy, strategy_enabled
 from src.utils.logger import (
     Event,
     LogLevel,
@@ -267,7 +268,7 @@ class SimpleReactAgent(BaseAgent):
             system_prompt=SIMPLE_REACT_SYSTEM_PROMPT.format(
                 actions="\n".join(str(a) for a in self._actions),
                 tools="\n".join(str(t) for t in self.tools.values()),
-            )
+            ) + (STRATEGY_PROMPT if strategy_enabled() else "")
         )
 
     def _update_cost(
@@ -351,6 +352,9 @@ class SimpleReactAgent(BaseAgent):
         )
         self._messages.append({"role": "user", "content": prompt})
         model_response, usage = self._make_call(logger=logger)
+        strategy = None
+        if strategy_enabled():
+            model_response, strategy = extract_strategy(model_response)
         self._update_cost(
             usage["input_tokens"],
             usage["output_tokens"],
@@ -370,6 +374,7 @@ class SimpleReactAgent(BaseAgent):
                 "time_out": time_out,
                 "event": action_observation.executed_action_name,
                 "raw_response": model_response.strip(),
+                "strategy": strategy,
                 "action_body": (
                     str(action_observation.action_body.tool_input)
                     if isinstance(action_observation.action_body, ToolCall)
@@ -398,6 +403,9 @@ class SimpleReactAgent(BaseAgent):
             }
         )
         model_response, usage = self._make_call(logger=logger)
+        strategy = None
+        if strategy_enabled():
+            model_response, strategy = extract_strategy(model_response)
         self._update_cost(
             usage["input_tokens"],
             usage["output_tokens"],
@@ -417,6 +425,7 @@ class SimpleReactAgent(BaseAgent):
                 "time_out": time_out,
                 "event": action_observation.executed_action_name,
                 "raw_response": model_response.strip(),
+                "strategy": strategy,
                 "action_body": (
                     str(action_observation.action_body.tool_input)
                     if isinstance(action_observation.action_body, ToolCall)
