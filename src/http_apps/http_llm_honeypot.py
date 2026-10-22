@@ -46,6 +46,7 @@ from src.utils.create_webapp import create_webapp
 from src.utils.docker_utils import build_image_if_needed
 from src.utils.judge import Judge
 from src.utils.litellm_erb import litellm_completion_erb
+from src.utils.strategy_logging import STRATEGY_PROMPT, extract_strategy, strategy_enabled
 from src.utils.logger import (
     Event,
     LogLevel,
@@ -139,6 +140,9 @@ def run_backend_worker(
         cached_tokens = usage["cached_tokens"]
         cache_write_tokens = usage["cache_creation_tokens"]
         logger.debug(f"Raw model response:\n{model_response_raw}")
+        strategy = None
+        if strategy_enabled():
+            model_response_raw, strategy = extract_strategy(model_response_raw)
         parsed_response = _parse_response_static(model_response_raw)
         time_out = time()
         logger.info(f"Parsed model response:\n{parsed_response}")
@@ -158,6 +162,7 @@ def run_backend_worker(
                 "in": command.strip(),
                 "out": parsed_response.strip(),
                 "raw_response": model_response_raw,
+                "strategy": strategy,
             }
         )
         if max_cost >= 0.0:
@@ -317,6 +322,8 @@ class HttpLLMHoneypot(BaseHttpApp):
         ):
             system_prompt += f"\n\n{benchmark_app.honeypot_additional_description}"
 
+        if strategy_enabled():
+            system_prompt += STRATEGY_PROMPT
         self._history.append({"role": "system", "content": system_prompt})
         logger.info(
             f"Honeypot will launch.\nHoneypot type: Hosted Webapp -- {benchmark_app.name}\nSystem prompt:\n{system_prompt}"
