@@ -95,7 +95,7 @@ Project changes live on `feature/interaction-logging` until the draft PR is vali
 
 ## Optional model-generated strategy summaries
 
-The guided experiment launcher enables `HONEYVAL_LOG_STRATEGY=1` by default. Both LLM prompts then request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. A missing tag is recorded as `null`.
+The guided experiment launcher enables `HONEYVAL_LOG_STRATEGY=1` by default. Both LLM prompts then request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. When a strategy is missing, one additional generation is requested before executing any action or returning any HTTP response; records still missing a strategy are flagged.
 
 This is an **elicited explanation of the model's decision**, not hidden chain-of-thought or an independent readout of internal reasoning. The prompt changes model behavior and token consumption; analyses comparing prompted to unprompted models must treat this as an intervention.
 
@@ -106,3 +106,21 @@ HONEYVAL_LOG_STRATEGY=1 bash scripts/nlp/run_honeyval.sh --mode run [your other 
 ```
 
 The `agent-metadata.jsonl` and `http-app-metadata.jsonl` records have timestamps, inputs/outputs, token fields, and the optional `strategy` statement. Align events by sample directory, chronological timestamps, and request content; **do not assume attacker and defender event counts are equal**, since an attacker action can produce zero or multiple HTTP requests. Check the rate of missing strategy fields before scaling up.
+
+### NLP RESEARCH EXTENSION — NOT UPSTREAM HONEYVAL
+
+**All** strategy prompting, retry-on-missing, and `strategy_*` fields are
+custom research modifications. See the `NLP RESEARCH EXTENSION` comments in
+`src/utils/strategy_logging.py`, `src/agents/simple_react_agent.py` and
+`src/http_apps/http_llm_honeypot.py`. The original honeypot instructions
+and HTTP schema are not replaced.
+
+Every model-generated decision records `strategy`, `strategy_valid`,
+`strategy_attempts` (1 or 2), `strategy_retried`, and both
+`strategy_initial_response` and `strategy_retry_response` for an audit trail.
+The retry adds only a temporary private correction prompt to the model's
+current messages and is never forwarded to the opposing model. Token totals
+include both model generations. A correction may change an action/response,
+which is a research intervention: compare the initial and final outputs in
+analyses. Exclude records with `strategy_valid=false` from strategy NLP.
+Lifecycle events START/END are not model decisions.
