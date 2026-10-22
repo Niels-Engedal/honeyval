@@ -41,7 +41,7 @@ from src.utils.constants import (
 from src.utils.cost import compute_llm_cost, compute_llm_cost_from_events
 from src.utils.judge import Judge
 from src.utils.litellm_erb import litellm_completion_erb
-from src.utils.strategy_logging import STRATEGY_PROMPT, extract_strategy, strategy_enabled
+from src.utils.strategy_logging import STRATEGY_PROMPT, collect_strategy, strategy_enabled
 from src.utils.logger import (
     Event,
     LogLevel,
@@ -353,8 +353,19 @@ class SimpleReactAgent(BaseAgent):
         self._messages.append({"role": "user", "content": prompt})
         model_response, usage = self._make_call(logger=logger)
         strategy = None
+        strategy_audit = {}
         if strategy_enabled():
-            model_response, strategy = extract_strategy(model_response)
+            # NLP RESEARCH EXTENSION: no tool actions during retry generation.
+            def retry_strategy(prompt):
+                self._messages.append({"role": "user", "content": prompt})
+                try:
+                    return self._make_call(logger=logger)
+                finally:
+                    self._messages.pop()
+
+            model_response, strategy, usage, strategy_audit = collect_strategy(
+                model_response, usage, retry_strategy
+            )
         self._update_cost(
             usage["input_tokens"],
             usage["output_tokens"],
@@ -375,6 +386,7 @@ class SimpleReactAgent(BaseAgent):
                 "event": action_observation.executed_action_name,
                 "raw_response": model_response.strip(),
                 "strategy": strategy,
+                **strategy_audit,
                 "action_body": (
                     str(action_observation.action_body.tool_input)
                     if isinstance(action_observation.action_body, ToolCall)
@@ -404,8 +416,19 @@ class SimpleReactAgent(BaseAgent):
         )
         model_response, usage = self._make_call(logger=logger)
         strategy = None
+        strategy_audit = {}
         if strategy_enabled():
-            model_response, strategy = extract_strategy(model_response)
+            # NLP RESEARCH EXTENSION: no tool actions during retry generation.
+            def retry_strategy(prompt):
+                self._messages.append({"role": "user", "content": prompt})
+                try:
+                    return self._make_call(logger=logger)
+                finally:
+                    self._messages.pop()
+
+            model_response, strategy, usage, strategy_audit = collect_strategy(
+                model_response, usage, retry_strategy
+            )
         self._update_cost(
             usage["input_tokens"],
             usage["output_tokens"],
@@ -426,6 +449,7 @@ class SimpleReactAgent(BaseAgent):
                 "event": action_observation.executed_action_name,
                 "raw_response": model_response.strip(),
                 "strategy": strategy,
+                **strategy_audit,
                 "action_body": (
                     str(action_observation.action_body.tool_input)
                     if isinstance(action_observation.action_body, ToolCall)
