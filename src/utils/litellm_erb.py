@@ -192,7 +192,9 @@ def litellm_completion_erb(
                 litellm_kwargs["base_url"] = os.environ.get("BIFROST_URL")
                 litellm_kwargs["api_key"] = os.environ.get("BIFROST_KEY")
                 # this is to make sure that litellm routes first to openai which redirects to bifrost
-                model_ = "openai/" + model
+                # The CLI and cost table already use provider-prefixed model IDs
+                # (e.g. "openai/gpt-5.4-mini"). Do not add the prefix twice.
+                model_ = model if model.startswith("openai/") else "openai/" + model
 
             supported_params = litellm.get_supported_openai_params(model_)
             if supported_params is None:
@@ -258,6 +260,12 @@ def litellm_completion_erb(
                 },
             )
         except Exception as e:
+            # Invalid model IDs / request parameters are not transient. Retrying
+            # them wastes time and can look like a hung experiment.
+            if isinstance(e, litellm.BadRequestError):
+                if logger is not None:
+                    logger.error(f"Non-retryable LiteLLM request error: {e}")
+                raise
             tries_left = tries - n_tries
             if tries_left > 0:
                 wait = np.random.randint(min_wait, min(min_wait + 2**n_tries, max_wait))
