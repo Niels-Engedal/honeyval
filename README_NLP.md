@@ -92,3 +92,17 @@ grep -R 'iptables insert failed' results/<experiment-name> --include='*.log' || 
 ```
 
 Project changes live on `feature/interaction-logging` until the draft PR is validated. Record the Git commit hash and experimental parameters when collecting data for analysis.
+
+## Optional model-generated strategy summaries
+
+The guided experiment launcher enables `HONEYVAL_LOG_STRATEGY=1` by default. Both LLM prompts then request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. A missing tag is recorded as `null`.
+
+This is an **elicited explanation of the model's decision**, not hidden chain-of-thought or an independent readout of internal reasoning. The prompt changes model behavior and token consumption; analyses comparing prompted to unprompted models must treat this as an intervention.
+
+To make a run with strategy logging from the unmodified command-line launcher, prepend `HONEYVAL_LOG_STRATEGY=1`:
+
+```bash
+HONEYVAL_LOG_STRATEGY=1 bash scripts/nlp/run_honeyval.sh --mode run [your other arguments here]
+```
+
+The `agent-metadata.jsonl` and `http-app-metadata.jsonl` records have timestamps, inputs/outputs, token fields, and the optional `strategy` statement. Align events by sample directory, chronological timestamps, and request content; **do not assume attacker and defender event counts are equal**, since an attacker action can produce zero or multiple HTTP requests. Check the rate of missing strategy fields before scaling up.
