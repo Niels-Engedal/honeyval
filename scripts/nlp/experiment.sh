@@ -48,7 +48,7 @@ if ! sudo -n /sbin/iptables -S DOCKER-USER >/dev/null 2>&1; then
   echo "Cannot inspect DOCKER-USER rules via sudo. Verify sandbox isolation first." >&2
   exit 1
 fi
-bash scripts/nlp/run_honeyval.sh \
+HONEYVAL_LOG_STRATEGY=1 bash scripts/nlp/run_honeyval.sh \
   --mode run \
   --meta_experiment_type "$NAME" \
   --benchmark_tasks agent-vs-http-app \
