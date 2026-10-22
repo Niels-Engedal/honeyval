@@ -157,6 +157,7 @@ def run_backend_worker(
                 "cache_write_tokens": cache_write_tokens,
                 "in": command.strip(),
                 "out": parsed_response.strip(),
+                "raw_response": model_response_raw,
             }
         )
         if max_cost >= 0.0:
@@ -432,7 +433,7 @@ class HttpLLMHoneypot(BaseHttpApp):
                     }
                 )
             else:
-                raise ValueError(f"No backend process found.")
+                logger.info("No backend process was started; nothing to clean up.")
 
         except Exception as e:
             logger.error(f"Failed to tear down the backend server: {e}")
@@ -532,7 +533,7 @@ class HttpLLMHoneypot(BaseHttpApp):
                 logger.info("The container has been removed successfully.")
                 self._container = None
             else:
-                raise ValueError("The container is None. Perhaps it failed to launch.")
+                logger.info("No frontend container was started; nothing to clean up.")
         except docker.errors.NotFound:
             logger.warning(
                 "The container was not found. It might have been removed already."
@@ -587,6 +588,24 @@ class HttpLLMHoneypot(BaseHttpApp):
                 metadata_logger=metadata_logger,
             )
 
+            # Register cleanup before starting either service. In particular, a
+            # failed frontend launch must not strand the backend child process.
+            # ExitStack runs callbacks in reverse order: front, back, reset.
+            stack.callback(self._reset_internal_state)
+            stack.callback(
+                self._tear_down_backend,
+                backend_port=backend_port,
+                logger=logger,
+                metadata_logger=metadata_logger,
+                connection_monitor=backend_connection_monitor,
+            )
+            stack.callback(
+                self._tear_down_front,
+                front_port=front_port,
+                logger=logger,
+                connection_monitor=front_connection_monitor,
+            )
+
             self._launch_backend(
                 backend_port=backend_port,
                 logger=logger,
@@ -600,22 +619,6 @@ class HttpLLMHoneypot(BaseHttpApp):
             self._launch_front(
                 benchmark_app=benchmark_app,
                 backend_port=backend_port,
-                front_port=front_port,
-                logger=logger,
-                connection_monitor=front_connection_monitor,
-            )
-
-            # prepare the teardown stack for exit
-            stack.callback(self._reset_internal_state)
-            stack.callback(
-                self._tear_down_backend,
-                backend_port=backend_port,
-                logger=logger,
-                metadata_logger=metadata_logger,
-                connection_monitor=backend_connection_monitor,
-            )
-            stack.callback(
-                self._tear_down_front,
                 front_port=front_port,
                 logger=logger,
                 connection_monitor=front_connection_monitor,
