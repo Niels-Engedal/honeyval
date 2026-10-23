@@ -220,7 +220,23 @@ The frontend is a **hybrid honeypot**: static/framework routes (such as
 `/docs` or `/openapi.json`) can return HTTP responses without
 calling the defender LLM. The scripts therefore match defender calls
 to attacker action windows rather than matching row numbers.
-This is an exploratory QC pipeline, **not yet the embeddings analysis**.
+Script 02 also diagnoses attacker `PARSING ERROR` decisions and shows
+trajectory lengths by app; strategies alone do not guarantee valid executable
+actions. For exploratory RQ1 Sentence-BERT similarities, first install
+`sentence-transformers` (if needed), then run:
+
+```bash
+python -m pip install sentence-transformers
+python nlp_research_scripts/03_embed_strategies.py \
+  --input analysis_outputs/luna-pilot-v2
+```
+
+Script 03 provides same-exchange similarity, defender-to-next-attacker
+lagged similarity, and an app/configuration/attacker-step-matched negative
+reference across independent trajectories. See
+[`nlp_research_scripts/README.md`](nlp_research_scripts/README.md)
+for output interpretation and limitations. Similarity is NOT an automatic
+deception classifier.
 
 ## NLP RESEARCH EXTENSION — contemporaneous strategies only
 
