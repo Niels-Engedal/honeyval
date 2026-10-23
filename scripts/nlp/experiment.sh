@@ -13,6 +13,8 @@ export HONEYVAL_LOG_STRATEGY="${HONEYVAL_LOG_STRATEGY:-1}"
 # When manual setup selects several defender conditions, confirm the whole
 # batch once rather than interrupting between experiments.
 MANUAL_BATCH_APPROVED=0
+# The images are shared across all selected apps and defender conditions.
+IMAGE_PREFLIGHT_DONE=0
 
 ask() {
   # ask VARIABLE "Question" "default" (assigns to variable in caller)
@@ -50,6 +52,35 @@ run_command() {
   fi
 
   check_isolation
+
+  # Prebuild the common HTTP-honeypot images *before* any workers launch.
+  # Honeyval otherwise attempts missing-image builds inside each trajectory,
+  # allowing 16 simultaneous pip downloads to fail and count as task progress.
+  # For direct CLI passthrough, only preflight actual HTTP-app runs; evaluation
+  # and metrics-only commands must remain offline and avoid Docker builds.
+  local mode="" tasks_specified=0 needs_http_app=0 arg i j
+  local -a args=("$@")
+  for ((i=0; i<${#args[@]}; i++)); do
+    case "${args[i]}" in
+      --mode)
+        mode="${args[i+1]:-}"
+        ;;
+      --benchmark_tasks)
+        tasks_specified=1
+        for ((j=i+1; j<${#args[@]}; j++)); do
+          [[ "${args[j]}" == --* ]] && break
+          case "${args[j]}" in agent-vs-http-app|all) needs_http_app=1 ;; esac
+        done
+        ;;
+    esac
+  done
+  # Omitting --benchmark_tasks tells Honeyval to run all task types.
+  if (( ! tasks_specified )); then needs_http_app=1; fi
+  if [[ "$mode" == "run" && "$needs_http_app" == "1" && "$IMAGE_PREFLIGHT_DONE" == "0" ]]; then
+    python3 scripts/nlp/preflight_images.py
+    IMAGE_PREFLIGHT_DONE=1
+  fi
+
   "${cmd[@]}"
 }
 
