@@ -116,6 +116,20 @@ Both interactive manual and direct passthrough use
 `HONEYVAL_LOG_STRATEGY=1` by default. To opt out, set
 `HONEYVAL_LOG_STRATEGY=0` explicitly.
 
+**GPT-5.6 Sol support:** `openai/gpt-5.6-sol-python-curl` is now
+accepted by the cost-limited SimpleReactAgent. Its model pricing is in
+`src/utils/constants.py` (input $4, cached input $0.40, output $20
+per million tokens; promotional standard rates confirmed 2026-10-23,
+valid at least until 2026-11-21). `src/utils/litellm_erb.py` also
+omits unsupported sampling parameters when GPT-5.6 or GPT-6 models
+use non-`none` reasoning effort. Large contexts above 272K input
+tokens cost more than the current estimator accounts for.
+
+A `cyber_policy` API rejection is **not** a missing-pricing error:
+changing this table cannot grant authorization or guarantee that
+cybersecurity prompts will be accepted. Record such runs as blocked
+by the provider, not as attacker failures or honeypot successes.
+
 **GPT-6 support:** The NLP fork adds GPT-6 Astra, GPT-6.1 Sol, and GPT-6
 Luna to `src/utils/constants.py` for token-cost accounting and changes
 `src/utils/litellm_erb.py` so GPT-6 reasoning requests do not send
