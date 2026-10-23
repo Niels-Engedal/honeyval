@@ -2,8 +2,6 @@
 import ast
 from pathlib import Path
 
-import pytest
-
 from src.agents.prompts import SIMPLE_REACT_SYSTEM_PROMPT
 from src.utils.strategy_logging import (
     add_strategy_instructions,
@@ -49,12 +47,17 @@ def test_defender_prompt_strategy_before_response_in_both_examples():
 
 
 def test_unknown_or_changed_schema_fails_explicitly():
-    with pytest.raises(ValueError):
-        add_strategy_instructions("unrelated schema", role="attacker")
-    with pytest.raises(ValueError):
-        add_strategy_instructions("irrelevant", role="defender")
-    with pytest.raises(ValueError):
-        add_strategy_instructions("anything", role="unknown")
+    for prompt, role in [
+        ("unrelated schema", "attacker"),
+        ("irrelevant", "defender"),
+        ("anything", "unknown"),
+    ]:
+        try:
+            add_strategy_instructions(prompt, role=role)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Expected a schema error for {role}")
 
 
 def test_strategy_separate_from_executed_action():
