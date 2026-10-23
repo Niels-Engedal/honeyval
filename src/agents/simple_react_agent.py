@@ -355,16 +355,19 @@ class SimpleReactAgent(BaseAgent):
         strategy = None
         strategy_audit = {}
         if strategy_enabled():
-            # NLP RESEARCH EXTENSION: no tool actions during retry generation.
-            def retry_strategy(prompt):
-                self._messages.append({"role": "user", "content": prompt})
+            # NLP RESEARCH EXTENSION: fixed first decision; explanation only.
+            def explain_strategy(fixed_output, prompt):
+                self._messages.extend([
+                    {"role": "assistant", "content": fixed_output},
+                    {"role": "user", "content": prompt},
+                ])
                 try:
                     return self._make_call(logger=logger)
                 finally:
-                    self._messages.pop()
+                    del self._messages[-2:]
 
             model_response, strategy, usage, strategy_audit = collect_strategy(
-                model_response, usage, retry_strategy
+                model_response, usage, explain_strategy
             )
         self._update_cost(
             usage["input_tokens"],
@@ -418,16 +421,19 @@ class SimpleReactAgent(BaseAgent):
         strategy = None
         strategy_audit = {}
         if strategy_enabled():
-            # NLP RESEARCH EXTENSION: no tool actions during retry generation.
-            def retry_strategy(prompt):
-                self._messages.append({"role": "user", "content": prompt})
+            # NLP RESEARCH EXTENSION: fixed first decision; explanation only.
+            def explain_strategy(fixed_output, prompt):
+                self._messages.extend([
+                    {"role": "assistant", "content": fixed_output},
+                    {"role": "user", "content": prompt},
+                ])
                 try:
                     return self._make_call(logger=logger)
                 finally:
-                    self._messages.pop()
+                    del self._messages[-2:]
 
             model_response, strategy, usage, strategy_audit = collect_strategy(
-                model_response, usage, retry_strategy
+                model_response, usage, explain_strategy
             )
         self._update_cost(
             usage["input_tokens"],
