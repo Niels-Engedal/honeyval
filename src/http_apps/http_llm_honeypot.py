@@ -143,9 +143,12 @@ def run_backend_worker(
         strategy = None
         strategy_audit = {}
         if strategy_enabled():
-            # NLP RESEARCH EXTENSION: correction before HTTP output, no extra request.
-            def retry_strategy(prompt):
-                local_history.append({"role": "user", "content": prompt})
+            # NLP RESEARCH EXTENSION: original HTTP response is immutable.
+            def explain_strategy(fixed_output, prompt):
+                local_history.extend([
+                    {"role": "assistant", "content": fixed_output},
+                    {"role": "user", "content": prompt},
+                ])
                 try:
                     return litellm_completion_erb(
                         tries=5, min_wait=1, max_wait=120, logger=logger,
@@ -153,10 +156,10 @@ def run_backend_worker(
                         temperature=temperature, reasoning_effort=reasoning_effort,
                     )
                 finally:
-                    local_history.pop()
+                    del local_history[-2:]
 
             model_response_raw, strategy, usage, strategy_audit = collect_strategy(
-                model_response_raw, usage, retry_strategy
+                model_response_raw, usage, explain_strategy
             )
             prompt_tokens = usage["input_tokens"]
             completion_tokens = usage["output_tokens"]
