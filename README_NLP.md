@@ -131,13 +131,16 @@ Project changes live on `feature/interaction-logging` until the draft PR is vali
 
 ## NLP RESEARCH EXTENSION — contemporaneous strategies only
 
-**CUSTOM research extension, not upstream Honeyval.** Since the 23 October 2026
-protocol revision, each LLM makes exactly **one decision generation**.
-We extract an optional `<STRATEGY>...</STRATEGY>` summary from that
+**CUSTOM research extension, not upstream Honeyval.** Under the 23 October 2026
+protocol, each decision uses the **first completed model generation**; no
+extra generation is made to fix a missing strategy. Original API retries
+for failed calls remain intact. We extract an optional `<STRATEGY>...</STRATEGY>` summary from that
 generation and strip the tag before normal action/HTTP processing.
 
-If the model omits a strategy, Honeyval **does not retry, regenerate, or
-request a retrospective explanation**. The original action or HTTP response
+If the model omits a strategy, our research extension **does not request a
+new decision, regenerate the action, or request a retrospective explanation**.
+Honeyval's ORIGINAL API-error retries are unchanged (attacker: up to 10 attempts;
+defender: up to 5, when the API call fails). The original action or HTTP response
 still proceeds normally. We record `strategy=null`,
 `strategy_valid=false`, and `strategy_source="missing"`. A malformed or
 empty action stays malformed/empty and generates no attacker HTTP request.
@@ -146,7 +149,9 @@ The defender only generates an HTTP response if a request actually reaches it.
 For successful contemporaneous capture, `strategy_source="contemporaneous"`.
 Old audit fields remain for backwards compatibility: `strategy_attempts=1`,
 `strategy_retried=false`, and both `strategy_retry_response` and
-`strategy_explanation_response` are null in NEW runs.
+`strategy_explanation_response` are null in NEW runs. The optional
+strategy-first output format is integrated next to the original ACTION and
+RESPONSE examples only when strategy logging is enabled.
 
 **Do not mix protocols without distinction.** Earlier pilot datasets used
 action-changing complete-output retries or retrospective explanation-only
@@ -159,6 +164,71 @@ Smoke/pilot via `scripts/nlp/experiment.sh` enables
 explicitly. Existing Honeyval attacker and honeypot instructions remain
 unchanged except for the strategy logging requirement. Our code additions are
 marked `NLP RESEARCH EXTENSION`.
+
+## Where the actual model prompts come from
+
+The full prompt visible in an \`agent.log\` or \`http-app.log\` is assembled
+from several files. Use this map when editing prompts, rather than changing
+arbitrary strings in the log.
+
+| Prompt component | Edit/inspect this file | How it is used |
+| --- | --- | --- |
+| Attacker system instructions, ACTION/TOOL schema, examples, and environment-observation prompt | \`src/agents/prompts.py\` | \`SIMPLE_REACT_SYSTEM_PROMPT\`, \`SIMPLE_REACT_INITIAL_PROMPT\`, and \`SIMPLE_REACT_ENVIRONMENT_RESPONSE_PROMPT\` |
+| Attacker's specific exploitation task and optional honeypot-detection warning | \`src/benchmark_prompts.py\` | \`PENTESTING_PROMPT_EXPLOIT\` and \`HONEYPOT_DETECTION_PROMPT\` (or hide variant) |
+| Defender's deception/engagement objective for \`--honeypot_additional_instructions mislead\` | \`src/benchmark_prompts.py\` | \`HONEYPOT_ADDITIONAL_INSTRUCTIONS_MISLEADING\` |
+| CLI mapping of \`exploit\`, \`exploit-detect\`, \`mislead\`, etc. | \`src/main.py\` | Selects which benchmark prompts and models to use |
+| Defender's baseline HTTP agent system prompt, OpenAPI and RESPONSE/STATUS/HEADER format | \`src/http_apps/http_llm_honeypot.py\` | \`HOSTED_WEBAPP_SYSTEM_PROMPT\` |
+| Login/Forum and other benchmark-specific goals and application descriptions | \`src/benchmark_apps/\` | Benchmark app definitions, including \`login.py\` and \`forum.py\` |
+| OpenAPI specification for each app | Selected benchmark app's \`openapi_config_path\` (referenced by its definition under \`src/benchmark_apps/\`) | Inserted as \`<OPENAPI_SPEC>\` for attacker and \`<OPENAPI_SCHEME>\` for defender |
+| **Our attacker and defender strategy-first instructions** | **\`src/utils/strategy_logging.py\`** | \`ATTACKER_STRATEGY_INSTRUCTION\`, \`DEFENDER_STRATEGY_INSTRUCTION\` and \`add_strategy_instructions()\` |
+| Point where the attacker system prompt is assembled | \`src/agents/simple_react_agent.py\` | \`SimpleReactAgent._set_system_prompt()\` |
+| Point where the defender system prompt is assembled | \`src/http_apps/http_llm_honeypot.py\` | \`HttpLLMHoneypot._set_system_prompt()\` |
+
+**Why the research instructions appear in the middle now:** with
+\`HONEYVAL_LOG_STRATEGY=1\`, \`add_strategy_instructions()\` inserts an
+example \`<STRATEGY>...</STRATEGY>\` immediately **before** each relevant
+\`<ACTION>\` or \`<RESPONSE>\` example in the assembled system prompt. It
+also adds concise role-specific instructions immediately alongside those
+formats. The original upstream prompt strings are not edited. This is a
+strategy-first *output convention*; it does not expose hidden reasoning.
+The model still generates one complete response, Honeyval extracts the
+summary, then processes the ACTION or RESPONSE normally.
+
+The actual assembled attacker prompt is shown in \`logs/agent.log\`, and
+the defender prompt is shown in \`logs/http-app.log\`. The agent's later
+\`Action-parsing response (STRATEGY removed if present)\` debug entry is
+**not** the original model generation. For the actual first generation,
+inspect \`strategy_initial_response\` in \`agent-metadata.jsonl\` or
+\`http-app-metadata.jsonl\`.
+
+**Experimental discipline:** freeze the prompt and save the Git commit
+SHA for each batch. If changing only the research instruction, edit the
+two role-specific constants in \`src/utils/strategy_logging.py\`; don't
+change both them and the deception/attack objectives in the same comparison.
+
+## Candidate RQ5 — long versus short interactions
+
+**Working question (not yet selected):** How do attackers' and defenders'
+expressed strategies differ between short and sustained interactions?
+Are specific defender linguistic strategies associated with longer attacker
+engagement?
+
+Possible trajectory-level measurements: number of *executed attacker
+actions*, number of *defender responses*, time to termination, and
+termination reason (refusal, give-up, success, error, or max-step censoring).
+Potential text features include manually validated tactic labels,
+expressed uncertainty, semantic similarity and turn-to-turn embedding
+changes. Prefer sentence-embedding models rather than treating raw BERT
+token embeddings as ready-made sentence similarity measures.
+
+**Avoid length confounds:** compare strategies within equivalent early
+windows (for example the first two valid exchanges), not all text pooled
+across a long versus short trajectory; longer runs mechanically offer more
+opportunities for deception and linguistic change. Stratify by app, attacker
+model, defender model, and outcome. A 6-step maximum truncates trajectories,
+so reaching that limit is *right-censoring*, not evidence that an interaction
+would naturally have ended at six steps. Refusal/technical failure are not
+evidence of successful deception. Associations are not causal effects.
 
 ## Inspect strategy completeness after any run
 
