@@ -1,0 +1,22 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+!.env_EXAMPLE
+
+# Generated experiment output can contain prompts, text, and credentials
+/results/
+/logs/
+/analysis/
+/analysis_outputs/
+
+# Python caches and local environments
+__pycache__/
+*.egg-info/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# Generated API applications
+/webapps/

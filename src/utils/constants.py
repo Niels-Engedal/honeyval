@@ -45,6 +45,29 @@ SECRET_MAPPING = {
 # these costs are a lower-bound, as some providers have increased prices
 # after a certain context window size
 TOKEN_COSTS_AND_CONTEXT = {
+    # NLP RESEARCH EXTENSION: current OpenAI API list prices per 1M tokens
+    # (standard tier, regular context size; verify rates before large runs).
+    "openai/gpt-6-astra": {
+        "input": 10.0,
+        "output": 50.0,
+        "cached": 1.0,
+        "max_in_context": 1050000,
+        "max_out_context": 128000,
+    },
+    "openai/gpt-6.1-sol": {
+        "input": 2.0,
+        "output": 10.0,
+        "cached": 0.1,
+        "max_in_context": 1050000,
+        "max_out_context": 128000,
+    },
+    "openai/gpt-6-luna": {
+        "input": 0.1,
+        "output": 0.5,
+        "cached": 0.01,
+        "max_in_context": 1050000,
+        "max_out_context": 128000,
+    },
     "vertex_ai/gemini-3-pro-preview": {
         "input": 2.0,
         "output": 12.0,
@@ -79,6 +102,17 @@ TOKEN_COSTS_AND_CONTEXT = {
         "cached": 0.05,
         "max_in_context": 1048576,
         "max_out_context": 65535,
+    },
+    # NLP RESEARCH EXTENSION: OpenAI API GPT-5.6 Sol promotional Standard rates
+    # per 1M tokens (confirmed 2026-10-23; valid at least through 2026-11-21).
+    # OpenAI charges higher rates above 272K input tokens; the current
+    # Honeyval cost estimator uses the short-context rate.
+    "openai/gpt-5.6-sol": {
+        "input": 4.0,
+        "output": 20.0,
+        "cached": 0.4,
+        "max_in_context": 1050000,
+        "max_out_context": 128000,
     },
     "openai/gpt-5.4": {
         "input": 2.5,

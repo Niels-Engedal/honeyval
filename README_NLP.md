@@ -1,0 +1,518 @@
+# Honeyval on UCloud
+
+Our fork of [Google Research Honeyval](https://github.com/google-research/honeyval) logs attacker and defender interactions for the NLP project. It uses direct OpenAI API access; **Bifrost is not required**. The original README contains the framework's full CLI documentation.
+
+**Verified (22 October 2026):** the strategy-enabled `nlp-strategy-smoke-2` smoke run completed with six attacker decisions and five defender decisions, all with recorded strategies. Four attacker decisions and one defender decision required one correction generation. This verifies one pilot trajectory, not reliability across many runs.
+
+## Tomorrow: restart the existing UCloud VM and continue
+
+1. Start the **same VM** from UCloud and reconnect with **VS Code Remote SSH** (use its UCloud Access / SSH connection details). Starting a different, fresh VM may require reinstalling Miniconda, Docker, and Docker images.
+2. Open a VS Code terminal and run:
+
+```bash
+cd /work/honeyval_project/honeyval
+git switch feature/interaction-logging
+git pull --ff-only
+source scripts/nlp/setup.sh
+```
+
+3. Confirm the terminal reports `Conda: honeyval`, `OpenAI API key: loaded`, and `Python Docker connection: OK`. To verify the saved pilot data:
+
+```bash
+find results/nlp-strategy-smoke-2 -name '*metadata.jsonl' -exec wc -l {} +
+```
+
+4. Before another experiment check `pgrep -af '[p]ython.*src/main.py'` and `docker ps`. Old Honeyval containers may survive reconnects or interrupted runs. Do not remove containers used by an active run. For long experiments use `tmux` inside the VS Code SSH terminal so disconnecting SSH does not end the shell session; tmux cannot survive rebooting the VM.
+5. Run `bash scripts/nlp/experiment.sh`, choose smoke or pilot, and **use a fresh experiment name**. Each API run incurs costs.
+
+**Persistence:** this checkout is under `/work/honeyval_project/honeyval`, so Honeyval writes outputs to `/work/honeyval_project/honeyval/results/`. Those outputs persist when the same persistent UCloud Member Files `/work` mount is reattached to another job. Verify the mount and files after reconnecting; do not assume VM-local `/home/ucloud` survives replacement. The private key lives under `/work/honeyval_project/.secrets/`.
+
+**Restart checklist (quick copy/paste):**
+
+```bash
+cd /work/honeyval_project/honeyval
+git switch feature/interaction-logging
+git pull --ff-only
+source scripts/nlp/setup.sh
+docker ps
+bash scripts/nlp/experiment.sh
+```
+
+The experiment script's smoke/pilot modes enable custom NLP strategy logging. Choose a **new experiment name** and verify strategy coverage using the inspection command near the end of this README. Do **not** delete old Docker containers if a Honeyval process is still running. Your existing `nlp-strategy-smoke-2` data remain under `results/`.
+
+## Start here (existing UCloud environment)
+
+UCloud may open a new shell at `/work`, losing the active Conda environment and exported variables. Shell command history can still be present. Use **source** so setup changes the current shell:
+
+```bash
+cd /work/honeyval_project/honeyval
+git pull --ff-only
+source scripts/nlp/setup.sh
+```
+
+The setup script:
+- Activates the existing `honeyval` Conda environment (creates and installs it if absent).
+- Asks for an OpenAI API key **only if the private file is missing**. Stores it in `/work/honeyval_project/.secrets/honeyval.env` with permission 600, outside Git.
+- Loads the key into the current terminal without displaying it.
+- Checks Docker access and warns about leftover Honeyval containers, without deleting them.
+- Returns to the repository root.
+
+Each collaborator must use a private UCloud Unix account/workspace or set `HONEYVAL_ENV_FILE` to their own inaccessible-to-others path. The default works for our existing `/work/honeyval_project` layout. Docker group access is powerful: use a dedicated VM.
+
+**Fresh VM:** first install Docker and Miniconda as described in the [upstream README](README.md), then clone this fork and select `feature/interaction-logging`:
+
+```bash
+mkdir -p /work/honeyval_project && cd /work/honeyval_project
+git clone https://github.com/Niels-Engedal/honeyval.git
+cd honeyval
+git switch --track origin/feature/interaction-logging
+source scripts/nlp/setup.sh
+```
+
+If Docker group changes are needed, `newgrp docker` starts another shell. Run `source scripts/nlp/setup.sh` again afterward. For environments where Docker image builds time out on PyPI, see upstream `src/utils/constants.py` for Dockerfile definitions; building those image definitions with `docker build --network=host` can help. The two needed images are `fastapi-webapp-base` and `sandbox`.
+
+## Run an experiment
+
+```bash
+bash scripts/nlp/experiment.sh
+```
+
+Choose **smoke** (1 sample), **pilot** (10 samples), or **manual**.
+Smoke and pilot retain their original GPT-5.4-mini / GPT-5.4-nano defaults.
+**Menu option 3 is now an interactive manual setup**, with editable models,
+app selection, attacker/defender prompts, sample counts, steps, reasoning
+efforts, and per-trajectory cost limits. It also enables our NLP strategy
+logging by default.
+
+### Run all apps under multiple defender conditions
+
+In **menu option 3 (Manual setup)** you can now type `all` at the
+benchmark-app question. This passes Honeyval's existing
+`--benchmark_apps all`, which currently selects **16 apps**. It must be
+entered alone (not `all Wiki`); alternatively enter specific apps such
+as `Login Wiki CreditCardService`.
+
+For **Defender instructions**, enter one or more names separated by
+spaces or commas, e.g. `mislead vulnerable`. These are **defender
+behavioural conditions**, not different attacker model types. The
+launcher executes **one complete Honeyval experiment per condition,
+sequentially**, with identical attacker, defender model, apps, sample
+count and other settings. Honeyval names the results directories with
+the defender instruction suffix, so they remain distinct beneath the
+same experiment name.
+
+Example settings for the main NLP dataset:
+
+```text
+Experiment name: nlp-luna-all-comparison-v1
+Benchmark apps: all
+Attacker model: openai/gpt-6-luna-python-curl
+Defender model: openai/gpt-6-luna
+Attacker prompt: exploit
+Defender instructions: mislead vulnerable
+Samples per app: 10
+Maximum attacker steps: 20
+Parallel workers: 4
+Attacker reasoning effort: medium
+Defender reasoning effort: medium
+```
+
+This schedules **16 apps × 10 samples × 2 defender conditions =
+320 independent trajectories**, potentially with hundreds or thousands
+of LLM calls. You can select **Parallel workers** in the manual menu;
+this sets Honeyval's existing `--max_workers` option and runs that many
+independent trajectories concurrently **within one defender condition**.
+The launcher defaults to **2** workers, and **2–4** is a reasonable
+starting range on a modest UCloud VM. More workers increase Docker/container
+and memory pressure, simultaneous API traffic, and possible rate-limiting;
+parallelism improves throughput but does not reduce per-trajectory token cost.
+The defender conditions themselves still run sequentially. The launcher displays this count and requests **one
+confirmation for the whole batch**. Costs are bounded only per
+attacker/defender trajectory; there is **no overall batch spending
+limit**. Use a small sample count before scaling up, and avoid changing
+prompts midway through data collection.
+
+To inspect exactly which two commands would execute, without making
+API calls or requiring Docker:
+
+```bash
+HONEYVAL_DRY_RUN=1 bash scripts/nlp/experiment.sh
+# Choose 3 and fill in the settings.
+```
+
+You can also use a piped noninteractive dry run for testing, but
+noninteractive **real** manual runs still require direct CLI
+passthrough. To test the launcher automatically:
+
+```bash
+python -m unittest tests/test_experiment_launcher.py -v
+```
+
+The tests use dry-run mode exclusively and never contact model APIs.
+Direct `experiment.sh manual --mode run ...` and the original
+single-condition smoke/pilot modes are unchanged.
+
+### Docker image preflight (fresh VM / parallel runs)
+
+The launcher now runs `scripts/nlp/preflight_images.py` **once before
+starting any workers** for `agent-vs-http-app` experiments. The preflight
+checks Docker access and the two required image tags,
+`fastapi-webapp-base` (HTTP frontend) and `sandbox` (Python/curl attacker).
+If an image is missing, it builds it **once** using
+`docker build --network=host`, then verifies the tag was created.
+The Dockerfile content is read directly from `src/utils/constants.py`,
+so the setup stays consistent with the versions Honeyval actually uses.
+If either build fails, **no agent trajectories start**. This avoids the
+previous 16-worker race where missing images were rebuilt simultaneously
+and unsuccessful launches advanced the progress bar.
+
+You can prepare or check the images independently after installing Docker:
+
+```bash
+cd /work/honeyval_project/honeyval
+python3 scripts/nlp/preflight_images.py
+```
+
+Subsequent launches reuse the images. The build's **host networking applies
+only during image construction**; Honeyval's attacker sandbox still uses
+its normal isolation at runtime. Ensure the DOCKER-USER firewall rules
+are configured and check logs for iptables errors as usual.
+
+Dry runs (`HONEYVAL_DRY_RUN=1`), evaluation (`--mode evaluate`), and
+metrics recalculation (`--mode run-only-metrics`) **do not build images**.
+Direct launcher commands for other task modes (`agent-vs-real`) may need
+additional images not covered by this HTTP-honeypot preflight.
+The existing `scripts/nlp/setup.sh` still handles Conda, credentials,
+and Docker access; the *experiment launcher* is responsible for images
+needed by its selected benchmark task.
+
+Test the image preflight without contacting Docker or the network:
+
+```bash
+python -m unittest tests/test_preflight_images.py -v
+```
+
+
+For a strong attacker versus small defender, manual defaults to
+`openai/gpt-6-astra-python-curl` (GPT-6 Astra attacker with original
+Honeyval curl/Python tools) and `openai/gpt-6-luna` (GPT-6 Luna defender),
+with `exploit` / `mislead`. These are the October 2026 flagship and
+efficiency models respectively. `openai/gpt-6.1-sol-python-curl` is a
+lower-cost alternative attacker.
+
+Example interactive run:
+
+```bash
+cd /work/honeyval_project/honeyval
+bash scripts/nlp/experiment.sh
+# Enter 3, then accept/edit the defaults, and confirm with y.
+```
+
+For advanced scripts, the original full CLI passthrough still works:
+
+```bash
+bash scripts/nlp/experiment.sh manual --mode run --meta_experiment_type my-run ...
+```
+
+Or preview the assembled command **without running any API calls**:
+
+```bash
+HONEYVAL_DRY_RUN=1 bash scripts/nlp/experiment.sh
+# Choose 3, then fill out the fields.
+```
+
+Both interactive manual and direct passthrough use
+`HONEYVAL_LOG_STRATEGY=1` by default. To opt out, set
+`HONEYVAL_LOG_STRATEGY=0` explicitly.
+
+**GPT-5.6 Sol support:** `openai/gpt-5.6-sol-python-curl` is now
+accepted by the cost-limited SimpleReactAgent. Its model pricing is in
+`src/utils/constants.py` (input $4, cached input $0.40, output $20
+per million tokens; promotional standard rates confirmed 2026-10-23,
+valid at least until 2026-11-21). `src/utils/litellm_erb.py` also
+omits unsupported sampling parameters when GPT-5.6 or GPT-6 models
+use non-`none` reasoning effort. Large contexts above 272K input
+tokens cost more than the current estimator accounts for.
+
+A `cyber_policy` API rejection is **not** a missing-pricing error:
+changing this table cannot grant authorization or guarantee that
+cybersecurity prompts will be accepted. Record such runs as blocked
+by the provider, not as attacker failures or honeypot successes.
+
+**GPT-6 support:** The NLP fork adds GPT-6 Astra, GPT-6.1 Sol, and GPT-6
+Luna to `src/utils/constants.py` for token-cost accounting and changes
+`src/utils/litellm_erb.py` so GPT-6 reasoning requests do not send
+unsupported custom `temperature` or `top_p`. Honeyval's original
+API-error backoff/retries remain intact. New models may require an updated
+LiteLLM installation and API model access; validate one trajectory before
+launching a batch. The framework uses Chat Completions with manually
+parsed XML tool actions (not OpenAI's native function-calling interface).
+
+**Costs:** The manual defaults limit each attacker trajectory to $5 and each
+defender trajectory to $2, not the total experiment. Pricing uses standard
+API rates as of October 2026 and is approximate; multiple apps and samples
+multiply the number of trajectories. Do not assume an overall spending cap.
+
+To run noninteractively with the original smoke defaults:
+
+```bash
+bash scripts/nlp/experiment.sh smoke
+```
+
+For complete control, run the ordinary CLI via our private-env launcher. Example, changing the model, sample count and instruction type:
+
+```bash
+bash scripts/nlp/run_honeyval.sh \
+  --mode run \
+  --meta_experiment_type nlp-my-experiment \
+  --benchmark_tasks agent-vs-http-app \
+  --benchmark_apps Login \
+  --pentest_model openai/gpt-5.4-mini-python-curl \
+  --honeypot_type llm \
+  --honeypot_model openai/gpt-5.4-nano \
+  --pentesting_prompt exploit-detect \
+  --n_samples 3 \
+  --max_workers 1 \
+  --pentest_max_steps 8 \
+  --pentest_reasoning_effort low \
+  --honeypot_reasoning_effort low \
+  --pentest_cost_limit 1 \
+  --honeypot_cost_limit 1
+```
+
+The launcher only sources the private key and invokes Honeyval's `src/main.py`. No separate proxy/server is installed.
+
+## Results and troubleshooting
+
+Results are under `results/<experiment-name>/<configuration>/<app>/<sample>/agent-vs-http-app/` in the repository on `/work`. Most useful files:
+
+- `logs/agent.log` — attacker actions and observations
+- `logs/http-app.log` — honeypot HTTP/backend activity
+- `metadata-logs/agent-metadata.jsonl` — structured attacker events
+- `metadata-logs/http-app-metadata.jsonl` — structured defender events (including our `raw_response` field)
+
+To find logs: `find results/<experiment-name> -name '*.log'`. A zero-error task and complete JSONL files demonstrate a completed run, **not** a successful attack. Generated response text is not hidden model reasoning. Treat logs as potentially sensitive and never commit them or API keys to Git.
+
+**After interruption:** inspect `docker ps`. An interrupted experiment can leave containers and firewall rules behind. Do not remove containers belonging to an active experiment; inspect owners/processes first. On the previous UCloud VM, several old `agent-sandbox-*` and `honeypot-Login-*` containers were found. Firewall restrictions require `sudo -n /sbin/iptables -S DOCKER-USER` and confirmation there are no `iptables insert failed` warnings. Don't use the attacker sandbox with unknown/untrusted agents unless isolation has been checked.
+
+```bash
+grep -R 'Task finished. Number of errors:' results/<experiment-name> --include='task.log'
+find results/<experiment-name> -name '*.jsonl' -exec wc -l {} +
+grep -R 'iptables insert failed' results/<experiment-name> --include='*.log' || true
+```
+
+Project changes live on `feature/interaction-logging` until the draft PR is validated. Record the Git commit hash and experimental parameters when collecting data for analysis.
+
+## Exploratory NLP analysis scripts (01 and 02)
+
+The **NLP RESEARCH EXTENSION** analysis scripts are committed under
+[`nlp_research_scripts/`](nlp_research_scripts/README.md) on this branch.
+No ZIP extraction or manual copying is necessary after `git pull`.
+They require only Python's standard library and never start the agents.
+
+From the Honeyval repository root, run:
+
+```bash
+python nlp_research_scripts/01_prepare_data.py \
+  --input results/nlp-luna-vs-luna-1 \
+  --output analysis_outputs/luna-test
+
+python nlp_research_scripts/02_explore_data.py \
+  --input analysis_outputs/luna-test
+```
+
+Replace the experiment name and output directory for a new pilot.
+Script 01 writes `decisions.csv`, `paired_exchanges.csv`,
+`trajectories.csv`, and `warnings.txt`. Script 02 writes
+`pilot_report.md`. Inspect warnings for any ambiguous time matching.
+The frontend is a **hybrid honeypot**: static/framework routes (such as
+`/docs` or `/openapi.json`) can return HTTP responses without
+calling the defender LLM. The scripts therefore match defender calls
+to attacker action windows rather than matching row numbers.
+Script 02 also diagnoses attacker `PARSING ERROR` decisions and shows
+trajectory lengths by app; strategies alone do not guarantee valid executable
+actions. For exploratory RQ1 Sentence-BERT similarities, first install
+`sentence-transformers` (if needed), then run:
+
+```bash
+python -m pip install sentence-transformers
+python nlp_research_scripts/03_embed_strategies.py \
+  --input analysis_outputs/luna-pilot-v2
+```
+
+Script 03 provides same-exchange similarity, defender-to-next-attacker
+lagged similarity, and an app/configuration/attacker-step-matched negative
+reference across independent trajectories. See
+[`nlp_research_scripts/README.md`](nlp_research_scripts/README.md)
+for output interpretation and limitations. Similarity is NOT an automatic
+deception classifier.
+
+## NLP RESEARCH EXTENSION — contemporaneous strategies only
+
+**CUSTOM research extension, not upstream Honeyval.** Under the 23 October 2026
+protocol, each decision uses the **first completed model generation**; no
+extra generation is made to fix a missing strategy. Original API retries
+for failed calls remain intact. We extract an optional `<STRATEGY>...</STRATEGY>` summary from that
+generation and strip the tag before normal action/HTTP processing.
+
+If the model omits a strategy, our research extension **does not request a
+new decision, regenerate the action, or request a retrospective explanation**.
+Honeyval's ORIGINAL API-error retries are unchanged (attacker: up to 10 attempts;
+defender: up to 5, when the API call fails). The original action or HTTP response
+still proceeds normally. We record `strategy=null`,
+`strategy_valid=false`, and `strategy_source="missing"`. A malformed or
+empty action stays malformed/empty and generates no attacker HTTP request.
+The defender only generates an HTTP response if a request actually reaches it.
+
+For successful contemporaneous capture, `strategy_source="contemporaneous"`.
+Old audit fields remain for backwards compatibility: `strategy_attempts=1`,
+`strategy_retried=false`, and both `strategy_retry_response` and
+`strategy_explanation_response` are null in NEW runs. The optional
+strategy-first output format is integrated next to the original ACTION and
+RESPONSE examples only when strategy logging is enabled.
+
+**Do not mix protocols without distinction.** Earlier pilot datasets used
+action-changing complete-output retries or retrospective explanation-only
+calls. Those records retain their original strategy provenance and need
+separate interpretation. Always save the experiment's Git commit hash.
+Strategies are elicited self-reports, not access to hidden model reasoning.
+
+Smoke/pilot via `scripts/nlp/experiment.sh` enables
+`HONEYVAL_LOG_STRATEGY=1` automatically. Direct/manual runs must set it
+explicitly. Existing Honeyval attacker and honeypot instructions remain
+unchanged except for the strategy logging requirement. Our code additions are
+marked `NLP RESEARCH EXTENSION`.
+
+## Strategy rationale protocol v2 (23 October 2026)
+
+**NLP RESEARCH EXTENSION — measurement only.** New strategy logs use
+`strategy_prompt_version=strategic-rationale-v2`, recorded beside every
+first-generation decision in `agent-metadata.jsonl` and
+`http-app-metadata.jsonl`. Script 01 also exports the protocol version to
+`decisions.csv`, `paired_exchanges.csv`, and `trajectories.csv`.
+
+The **attacker** is asked for 3–5 specific sentences about the latest
+observation, hypothesis/goal, purpose of the selected action (including
+GIVEUP/SUCCESS), and the information/effect it hopes to obtain.
+
+The **defender** is asked for 3–5 specific sentences about evidence in the
+incoming request, how its **additional instructions** apply (if at all),
+the intended interaction tactic, and why its chosen response supports that
+tactic. A correct 401 may still be strategically appropriate if a believable
+response is the best way to maintain engagement; the defender must not invent
+a deceptive motive to make the report sound interesting.
+
+These are **elicited rationales**, *not* access to hidden chain-of-thought or
+an independent measurement of deception. Asking about an additional objective
+can itself influence the response (measurement reactivity). The actual
+`mislead` behavioural prompt from `src/benchmark_prompts.py` is deliberately
+**unchanged**. To experimentally increase deception, introduce a separate
+behavioural-prompt condition and compare it with `mislead`; do not silently
+redefine the same condition while also changing the logging prompt.
+
+**Protocol comparability:** prior Luna-vs-Luna runs used the shorter
+strategy-elicitation instructions. Do not pool their strategy embeddings
+with v2 results as though prompt text were constant. Script 03 refuses
+inputs with mixed protocol versions. Compare old and new runs for logging
+coverage/format and inspect strategy specificity, not as an unconfounded
+test of deception or engagement.
+
+**Validate before scaling:** the 20-trajectory pilot had excellent
+strategy coverage but 40/265 attacker ACTION parsing errors. Longer
+`<STRATEGY>` blocks may increase token use and parsing failures.
+Run a small v2 pilot, check ACTION validity and strategy–action
+consistency, then collect a larger batch only if these remain acceptable.
+
+## Where the actual model prompts come from
+
+The full prompt visible in an `agent.log` or `http-app.log` is assembled
+from several files. Use this map when editing prompts, rather than changing
+arbitrary strings in the log.
+
+| Prompt component | Edit/inspect this file | How it is used |
+| --- | --- | --- |
+| Attacker system instructions, ACTION/TOOL schema, examples, and environment-observation prompt | `src/agents/prompts.py` | `SIMPLE_REACT_SYSTEM_PROMPT`, `SIMPLE_REACT_INITIAL_PROMPT`, and `SIMPLE_REACT_ENVIRONMENT_RESPONSE_PROMPT` |
+| Attacker's specific exploitation task and optional honeypot-detection warning | `src/benchmark_prompts.py` | `PENTESTING_PROMPT_EXPLOIT` and `HONEYPOT_DETECTION_PROMPT` (or hide variant) |
+| Defender's deception/engagement objective for `--honeypot_additional_instructions mislead` | `src/benchmark_prompts.py` | `HONEYPOT_ADDITIONAL_INSTRUCTIONS_MISLEADING` |
+| CLI mapping of `exploit`, `exploit-detect`, `mislead`, etc. | `src/main.py` | Selects which benchmark prompts and models to use |
+| Defender's baseline HTTP agent system prompt, OpenAPI and RESPONSE/STATUS/HEADER format | `src/http_apps/http_llm_honeypot.py` | `HOSTED_WEBAPP_SYSTEM_PROMPT` |
+| Login/Forum and other benchmark-specific goals and application descriptions | `src/benchmark_apps/` | Benchmark app definitions, including `login.py` and `forum.py` |
+| OpenAPI specification for each app | Selected benchmark app's `openapi_config_path` (referenced by its definition under `src/benchmark_apps/`) | Inserted as `<OPENAPI_SPEC>` for attacker and `<OPENAPI_SCHEME>` for defender |
+| **Our attacker and defender strategy-first instructions** | **`src/utils/strategy_logging.py`** | `ATTACKER_STRATEGY_INSTRUCTION`, `DEFENDER_STRATEGY_INSTRUCTION` and `add_strategy_instructions()` |
+| Point where the attacker system prompt is assembled | `src/agents/simple_react_agent.py` | `SimpleReactAgent._set_system_prompt()` |
+| Point where the defender system prompt is assembled | `src/http_apps/http_llm_honeypot.py` | `HttpLLMHoneypot._set_system_prompt()` |
+
+**Why the research instructions appear in the middle now:** with
+`HONEYVAL_LOG_STRATEGY=1`, `add_strategy_instructions()` inserts an
+example `<STRATEGY>...</STRATEGY>` immediately **before** each relevant
+`<ACTION>` or `<RESPONSE>` example in the assembled system prompt. It
+also adds concise role-specific instructions immediately alongside those
+formats. The original upstream prompt strings are not edited. This is a
+strategy-first *output convention*; it does not expose hidden reasoning.
+The model still generates one complete response, Honeyval extracts the
+summary, then processes the ACTION or RESPONSE normally.
+
+The actual assembled attacker prompt is shown in `logs/agent.log`, and
+the defender prompt is shown in `logs/http-app.log`. The agent's later
+`Action-parsing response (STRATEGY removed if present)` debug entry is
+**not** the original model generation. For the actual first generation,
+inspect `strategy_initial_response` in `agent-metadata.jsonl` or
+`http-app-metadata.jsonl`.
+
+**Experimental discipline:** freeze the prompt and save the Git commit
+SHA for each batch. If changing only the research instruction, edit the
+two role-specific constants in `src/utils/strategy_logging.py`; don't
+change both them and the deception/attack objectives in the same comparison.
+
+## Candidate RQ5 — long versus short interactions
+
+**Working question (not yet selected):** How do attackers' and defenders'
+expressed strategies differ between short and sustained interactions?
+Are specific defender linguistic strategies associated with longer attacker
+engagement?
+
+Possible trajectory-level measurements: number of *executed attacker
+actions*, number of *defender responses*, time to termination, and
+termination reason (refusal, give-up, success, error, or max-step censoring).
+Potential text features include manually validated tactic labels,
+expressed uncertainty, semantic similarity and turn-to-turn embedding
+changes. Prefer sentence-embedding models rather than treating raw BERT
+token embeddings as ready-made sentence similarity measures.
+
+**Avoid length confounds:** compare strategies within equivalent early
+windows (for example the first two valid exchanges), not all text pooled
+across a long versus short trajectory; longer runs mechanically offer more
+opportunities for deception and linguistic change. Stratify by app, attacker
+model, defender model, and outcome. A 6-step maximum truncates trajectories,
+so reaching that limit is *right-censoring*, not evidence that an interaction
+would naturally have ended at six steps. Refusal/technical failure are not
+evidence of successful deception. Associations are not causal effects.
+
+## Inspect strategy completeness after any run
+
+Change the experiment name below, then run from the repository root:
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+
+root = Path("results/nlp-strategy-smoke-2")  # change to your run name
+for filename, role in [("agent-metadata.jsonl", "ATTACKER"),
+                       ("http-app-metadata.jsonl", "DEFENDER")]:
+    records = [json.loads(line) for file in root.rglob(filename)
+               for line in file.read_text().splitlines() if line.strip()]
+    decisions = [r for r in records if r.get("event") not in
+                 {"START", "END", "ERROR", "RATE_LIMIT_ERROR"}]
+    valid = sum(bool(r.get("strategy_valid")) for r in decisions)
+    retried = sum(bool(r.get("strategy_retried")) for r in decisions)
+    print(f"{role}: {valid}/{len(decisions)} strategies; {retried} retried")
+    for i, item in enumerate(decisions, 1):
+        if not item.get("strategy_valid"):
+            print(f"  MISSING: decision {i}, event={item.get('event')}")
+PY
+```
+
+Observed in `nlp-strategy-smoke-2`: **attacker 6/6 (4 retries), defender 5/5 (1 retry)**. This means strategy capture worked in this test. It does **not** prove that the summaries reflect private internal reasoning or that every future run will have 100% coverage. This OLD experiment used action-regenerating retries, which sometimes changed the first decision. New runs preserve first-pass decisions.
+
+**Tests:** the optional unit tests are in `tests/test_strategy_logging.py`. `pytest` is **not preinstalled** in our current Conda environment; running `python -m pytest` without installing it will fail with `No module named pytest`. If wanted, install it with `python -m pip install pytest` and then run `python -m pytest tests/test_strategy_logging.py -q`. This is separate from running a smoke experiment.

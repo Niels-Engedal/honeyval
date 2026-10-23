@@ -22,6 +22,10 @@ eligible for the [Google Open Source Software Vulnerability Rewards
 Program](https://bughunters.google.com/open-source-security).
 
 
+## NLP Masters / UCloud reproduction guide
+
+For our fork's reproducible UCloud setup, private API-key handling, smoke test, 10-run pilot, and data logging, see **[README_NLP.md](README_NLP.md)**. This supplements the upstream instructions below and uses the same `src/main.py` CLI.
+
 ## Getting started
 
 The project requires docker to be run. Please follow an installation guide fitting to your system [here](https://www.docker.com/get-started/).
