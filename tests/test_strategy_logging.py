@@ -1,71 +1,39 @@
-"""Checks that research summaries are removed before normal parsing/delivery."""
+"""NLP RESEARCH EXTENSION tests: first decisions remain immutable."""
+from src.utils.strategy_logging import collect_strategy, extract_strategy
 
-from src.utils.strategy_logging import extract_strategy
+def test_first_pass():
+    def unexpected(*args):
+        raise AssertionError("No explanation needed")
+    raw = "<STRATEGY>Probe paths.</STRATEGY><ACTION>original</ACTION>"
+    clean, strategy, _, audit = collect_strategy(raw, {}, unexpected)
+    assert clean == "<ACTION>original</ACTION>"
+    assert strategy == "Probe paths."
+    assert audit["strategy_source"] == "contemporaneous"
 
-
-def test_strategy_separated_from_action():
-    raw = "<STRATEGY>Try login first.</STRATEGY>\n<ACTION><ACTION_NAME>TOOL</ACTION_NAME></ACTION>"
-    clean, strategy = extract_strategy(raw)
-    assert strategy == "Try login first."
-    assert clean.startswith("<ACTION>")
-    assert "<STRATEGY>" not in clean
-
-
-def test_strategy_separated_from_http_reply():
-    raw = "<STRATEGY>Reject bad password.</STRATEGY>\n<RESPONSE><CONTENT>Invalid credentials</CONTENT><STATUS>401</STATUS></RESPONSE>"
-    clean, strategy = extract_strategy(raw)
-    assert strategy == "Reject bad password."
-    assert clean.startswith("<RESPONSE>")
-    assert "<STRATEGY>" not in clean
-
-
-def test_no_strategy_preserves_existing_output():
-    raw = "<RESPONSE><STATUS>200</STATUS></RESPONSE>"
-    clean, strategy = extract_strategy(raw)
-    assert clean == raw
-    assert strategy is None
-
-
-# ====================== NLP RESEARCH EXTENSION ======================
-def test_first_pass_valid_strategy_does_not_retry():
-    from src.utils.strategy_logging import collect_strategy
-    def must_not_retry(prompt):
-        raise AssertionError("Unexpected retry")
-    original = "<STRATEGY>Inspect routes.</STRATEGY><ACTION>x</ACTION>"
+def test_retrospective_keeps_first_action():
+    calls = []
+    def explain(original, prompt):
+        calls.append(original)
+        return "<STRATEGY>Original action explained.</STRATEGY><ACTION>different</ACTION>", {"input_tokens": 5, "output_tokens": 7}
     clean, strategy, usage, audit = collect_strategy(
-        original, {"input_tokens": 10, "output_tokens": 5}, must_not_retry
+        "<ACTION>original</ACTION>", {"input_tokens": 10, "output_tokens": 3}, explain
     )
-    assert strategy == "Inspect routes."
-    assert clean == "<ACTION>x</ACTION>"
-    assert audit["strategy_attempts"] == 1
-    assert usage["input_tokens"] == 10
+    assert calls == ["<ACTION>original</ACTION>"]
+    assert clean == "<ACTION>original</ACTION>"
+    assert strategy == "Original action explained."
+    assert audit["strategy_source"] == "retrospective"
+    assert usage["input_tokens"] == 15 and usage["output_tokens"] == 10
 
-
-def test_missing_strategy_one_correction_and_token_accounting():
-    from src.utils.strategy_logging import collect_strategy
-    called = []
-    def retry(prompt):
-        called.append(prompt)
-        return "<STRATEGY>Try registration.</STRATEGY><ACTION>y</ACTION>", {
-            "input_tokens": 3, "output_tokens": 4
-        }
-    clean, strategy, usage, audit = collect_strategy(
-        "<ACTION>x</ACTION>", {"input_tokens": 10, "output_tokens": 5}, retry
-    )
-    assert len(called) == 1
-    assert strategy == "Try registration."
-    assert clean == "<ACTION>y</ACTION>"
-    assert usage["input_tokens"] == 13
-    assert usage["output_tokens"] == 9
-    assert audit["strategy_attempts"] == 2
-    assert audit["strategy_valid"]
-
-
-def test_retry_failure_retains_original_action_and_flags_incomplete():
-    from src.utils.strategy_logging import collect_strategy
+def test_missing_explanation_retains_output():
     clean, strategy, _, audit = collect_strategy(
-        "<ACTION>x</ACTION>", {}, lambda _: ("<ACTION>y</ACTION>", {})
+        "<RESPONSE>fixed</RESPONSE>", {}, lambda *_: ("missing", {})
     )
-    assert clean == "<ACTION>x</ACTION>"
-    assert strategy is None
-    assert audit["strategy_valid"] is False
+    assert clean == "<RESPONSE>fixed</RESPONSE>"
+    assert strategy is None and audit["strategy_source"] == "missing"
+
+def test_explanation_error_does_not_break_execution():
+    def fail(*args):
+        raise RuntimeError("test failure")
+    clean, strategy, _, audit = collect_strategy("<ACTION>original</ACTION>", {}, fail)
+    assert clean == "<ACTION>original</ACTION>" and strategy is None
+    assert "STRATEGY_LOGGING_ERROR" in audit["strategy_explanation_response"]
