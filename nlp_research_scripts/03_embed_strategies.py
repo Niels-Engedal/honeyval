@@ -14,11 +14,10 @@ report. Unpaired/missing strategies are retained in original preparation CSVs.
 """
 import argparse
 import csv
-import json
 import random
 from collections import defaultdict
 from pathlib import Path
-from statistics import mean, median
+from statistics import mean
 
 import numpy as np
 
@@ -202,7 +201,7 @@ def run(source, model_id, bootstrap, seed):
 
     report = [
         "# Sentence-BERT strategy-alignment pilot (RQ1, exploratory)", "",
-        f"- Embedding model: \`{model_id}\`",
+        f"- Embedding model: `{model_id}`",
         f"- Complete matched events: **{len(output)}**",
         f"- Distinct strategies embedded: {len(texts)}",
         f"- Independent trajectories with matched data: {len(trajectory_rows)}",
@@ -261,4 +260,6 @@ if __name__ == "__main__":
                         help="Number of trajectory-cluster bootstrap replicates")
     parser.add_argument("--seed", type=int, default=99)
     args = parser.parse_args()
+    if args.bootstrap < 1:
+        parser.error("--bootstrap must be >= 1")
     run(args.input, args.model, args.bootstrap, args.seed)
