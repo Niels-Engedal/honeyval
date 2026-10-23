@@ -194,6 +194,34 @@ grep -R 'iptables insert failed' results/<experiment-name> --include='*.log' || 
 
 Project changes live on `feature/interaction-logging` until the draft PR is validated. Record the Git commit hash and experimental parameters when collecting data for analysis.
 
+## Exploratory NLP analysis scripts (01 and 02)
+
+The **NLP RESEARCH EXTENSION** analysis scripts are committed under
+[`nlp_research_scripts/`](nlp_research_scripts/README.md) on this branch.
+No ZIP extraction or manual copying is necessary after `git pull`.
+They require only Python's standard library and never start the agents.
+
+From the Honeyval repository root, run:
+
+```bash
+python nlp_research_scripts/01_prepare_data.py \
+  --input results/nlp-luna-vs-luna-1 \
+  --output analysis_outputs/luna-test
+
+python nlp_research_scripts/02_explore_data.py \
+  --input analysis_outputs/luna-test
+```
+
+Replace the experiment name and output directory for a new pilot.
+Script 01 writes `decisions.csv`, `paired_exchanges.csv`,
+`trajectories.csv`, and `warnings.txt`. Script 02 writes
+`pilot_report.md`. Inspect warnings for any ambiguous time matching.
+The frontend is a **hybrid honeypot**: static/framework routes (such as
+`/docs` or `/openapi.json`) can return HTTP responses without
+calling the defender LLM. The scripts therefore match defender calls
+to attacker action windows rather than matching row numbers.
+This is an exploratory QC pipeline, **not yet the embeddings analysis**.
+
 ## NLP RESEARCH EXTENSION — contemporaneous strategies only
 
 **CUSTOM research extension, not upstream Honeyval.** Under the 23 October 2026
