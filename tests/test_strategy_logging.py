@@ -30,7 +30,9 @@ def test_attacker_prompt_strategy_before_action_in_both_examples():
     assert updated.count("<STRATEGY>") == 2
     assert updated.count("<ACTION>") == original.count("<ACTION>")
     assert updated.index("<STRATEGY>") < updated.index("<ACTION>")
-    assert "the NEXT action" in updated
+    assert "chosen NEXT action" in updated
+    assert "3-5 concrete sentences" in updated
+    assert "GIVEUP or SUCCESS" in updated
     assert "In each turn, you may execute only one action." in updated
 
 
@@ -43,6 +45,9 @@ def test_defender_prompt_strategy_before_response_in_both_examples():
     assert updated.count("<RESPONSE>") == original.count("<RESPONSE>")
     assert updated.index("<STRATEGY>") < updated.index("<RESPONSE>")
     assert "mislead test" in updated
+    assert "ADDITIONAL INSTRUCTIONS" in updated
+    assert "3-5 concrete sentences" in updated
+    assert "do not apply" in updated
     assert "<HEADER>" in updated
 
 
@@ -68,6 +73,7 @@ def test_strategy_separate_from_executed_action():
     assert audit["strategy_source"] == "contemporaneous"
     assert audit["strategy_attempts"] == 1 and audit["strategy_retried"] is False
     assert audit["strategy_initial_response"] == raw
+    assert audit["strategy_prompt_version"] == "strategic-rationale-v2"
     assert usage["input_tokens"] == 10
 
 
