@@ -129,38 +129,35 @@ grep -R 'iptables insert failed' results/<experiment-name> --include='*.log' || 
 
 Project changes live on `feature/interaction-logging` until the draft PR is validated. Record the Git commit hash and experimental parameters when collecting data for analysis.
 
-## NLP RESEARCH EXTENSION: model-generated strategy summaries (enabled by guided runner)
+## NLP RESEARCH EXTENSION — fixed decisions and strategy provenance
 
-The guided experiment launcher enables `HONEYVAL_LOG_STRATEGY=1` for its **smoke and pilot** choices. The **manual** choice calls `run_honeyval.sh` directly and therefore requires you to set `HONEYVAL_LOG_STRATEGY=1` yourself. For direct use of `run_honeyval.sh`, strategy collection is explicitly enabled with that environment variable. The existing Honeyval prompts are retained and augmented with a research-only output requirement. Both LLM prompts request a **1–3 sentence, high-level strategy statement** enclosed in `<STRATEGY>...</STRATEGY>` before each normal action or HTTP response. Honeyval extracts the statement into the `strategy` field of the appropriate JSONL event and strips it from the tool/HTTP output and future model conversation history. When a strategy is missing, one additional generation is requested before executing any action or returning any HTTP response; records still missing a strategy are flagged.
+This section documents CUSTOM research additions, NOT upstream Honeyval.
+The guided smoke/pilot launcher enables HONEYVAL_LOG_STRATEGY=1. Manual and
+direct runs must set that environment variable explicitly. Honeyval's original
+attacker and defender objectives, including mislead when selected, are retained.
 
-This is an **elicited explanation of the model's decision**, not hidden chain-of-thought or an independent readout of internal reasoning. The prompt changes model behavior and token consumption; analyses comparing prompted to unprompted models must treat this as an intervention.
+**Protocol updated 23 October 2026:** Our earlier research-only retry
+regenerated a complete model response and sometimes CHANGED the chosen action.
+Therefore, older pilot data are subject to an action-regeneration confound.
 
-To make a run with strategy logging from the unmodified command-line launcher, prepend `HONEYVAL_LOG_STRATEGY=1`:
+**Current procedure:** The FIRST model generation is ALWAYS the fixed action
+or HTTP response (after stripping its STRATEGY tag). If a strategy is missing,
+one optional second model call only EXPLAINS that fixed decision. Its output
+is never executed, returned as an HTTP response, or added to persistent
+participant conversation histories. Failure to obtain an explanation never
+replaces or prevents the first decision.
 
-```bash
-HONEYVAL_LOG_STRATEGY=1 bash scripts/nlp/run_honeyval.sh --mode run [your other arguments here]
-```
+strategy_source is contemporaneous, retrospective, or missing. Records
+also retain strategy_valid, strategy_attempts, strategy_retried (legacy name),
+strategy_initial_response, strategy_retry_response (legacy name), and
+strategy_explanation_response. The latter two capture only explanations in
+new runs. Keep protocol version or Git SHA with each experiment; do not pool
+old and new runs uncritically. Retrospective statements are elicited
+self-reports, NOT observations of hidden model reasoning.
 
-The `agent-metadata.jsonl` and `http-app-metadata.jsonl` records have timestamps, inputs/outputs, token fields, and a `strategy` statement when successfully elicited. Align events by sample directory, chronological timestamps, and request content; **do not assume attacker and defender event counts are equal**, since an attacker action can produce zero or multiple HTTP requests. Check the rate of missing strategy fields before scaling up.
-
-### NLP RESEARCH EXTENSION — NOT UPSTREAM HONEYVAL
-
-**All** strategy prompting, retry-on-missing, and `strategy_*` fields are
-custom research modifications. See the `NLP RESEARCH EXTENSION` comments in
-`src/utils/strategy_logging.py`, `src/agents/simple_react_agent.py` and
-`src/http_apps/http_llm_honeypot.py`. The original honeypot instructions
-and HTTP schema are not replaced.
-
-Every model-generated decision records `strategy`, `strategy_valid`,
-`strategy_attempts` (1 or 2), `strategy_retried`, and both
-`strategy_initial_response` and `strategy_retry_response` for an audit trail.
-The retry adds only a temporary private correction prompt to the model's
-current messages and is never forwarded to the opposing model. Token totals
-include both model generations. A correction may change an action/response,
-which is a research intervention: compare the initial and final outputs in
-analyses. Exclude records with `strategy_valid=false` from strategy NLP.
-Lifecycle events START/END are not model decisions.
-
+All implementation changes are marked NLP RESEARCH EXTENSION in
+src/utils/strategy_logging.py, src/agents/simple_react_agent.py, and
+src/http_apps/http_llm_honeypot.py. No sandbox networking code changed.
 ## Inspect strategy completeness after any run
 
 Change the experiment name below, then run from the repository root:
@@ -186,6 +183,6 @@ for filename, role in [("agent-metadata.jsonl", "ATTACKER"),
 PY
 ```
 
-Observed in `nlp-strategy-smoke-2`: **attacker 6/6 (4 retries), defender 5/5 (1 retry)**. This means strategy capture worked in this test. It does **not** prove that the summaries reflect private internal reasoning or that every future run will have 100% coverage. A retry can alter the resulting action; compare the original and corrected responses when interpreting behaviour.
+Observed in `nlp-strategy-smoke-2`: **attacker 6/6 (4 retries), defender 5/5 (1 retry)**. This means strategy capture worked in this test. It does **not** prove that the summaries reflect private internal reasoning or that every future run will have 100% coverage. This OLD experiment used action-regenerating retries, which sometimes changed the first decision. New runs preserve first-pass decisions.
 
 **Tests:** the optional unit tests are in `tests/test_strategy_logging.py`. `pytest` is **not preinstalled** in our current Conda environment; running `python -m pytest` without installing it will fail with `No module named pytest`. If wanted, install it with `python -m pip install pytest` and then run `python -m pytest tests/test_strategy_logging.py -q`. This is separate from running a smoke experiment.
