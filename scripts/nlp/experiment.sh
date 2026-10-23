@@ -10,6 +10,10 @@ cd "$ROOT"
 # Set HONEYVAL_LOG_STRATEGY=0 explicitly to disable it.
 export HONEYVAL_LOG_STRATEGY="${HONEYVAL_LOG_STRATEGY:-1}"
 
+# When manual setup selects several defender conditions, confirm the whole
+# batch once rather than interrupting between experiments.
+MANUAL_BATCH_APPROVED=0
+
 ask() {
   # ask VARIABLE "Question" "default" (assigns to variable in caller)
   local reply=""
@@ -39,7 +43,7 @@ run_command() {
     return
   fi
 
-  if [[ -t 0 ]]; then
+  if [[ -t 0 && "$MANUAL_BATCH_APPROVED" != "1" ]]; then
     local confirm=""
     read -r -p "Start experiment? [y/N] " confirm
     [[ "$confirm" =~ ^[Yy]$ ]] || return 0
@@ -89,11 +93,11 @@ case "$MODE" in
 
     STAMP="$(date +%Y%m%d-%H%M%S)"
     ask NAME "Experiment name" "nlp-astra-vs-luna-$STAMP"
-    ask APPS_TEXT "Benchmark apps (space separated)" "Login Forum"
+    ask APPS_TEXT "Benchmark apps (space separated, or 'all')" "Login Forum"
     ask ATTACKER "Attacker model" "openai/gpt-6-astra-python-curl"
     ask DEFENDER "Defender model" "openai/gpt-6-luna"
     ask PENTEST_PROMPT "Attacker prompt (exploit/exploit-detect/exploit-detect-hide)" "exploit"
-    ask HONEYPOT_PROMPT "Defender instructions (mislead/none/convince/vulnerable/...)" "mislead"
+    ask HONEYPOT_PROMPTS_TEXT "Defender instructions (one or more, e.g. 'mislead vulnerable')" "mislead"
     ask SAMPLES "Samples per app" "1"
     ask STEPS "Maximum attacker steps" "8"
     ask ATTACKER_EFFORT "Attacker reasoning effort" "medium"
@@ -110,39 +114,92 @@ case "$MODE" in
     }
     case "$PENTEST_PROMPT" in exploit|exploit-detect|exploit-detect-hide) ;; *)
       echo "Invalid attacker prompt" >&2; exit 2 ;; esac
-    case "$HONEYPOT_PROMPT" in none|mislead|convince|vulnerable|careful_pi|aggressive_pi) ;; *)
-      echo "Invalid defender prompt" >&2; exit 2 ;; esac
+    # Accept whitespace or comma separation for multiple defender conditions.
+    # Each condition is a SEPARATE Honeyval run; never pass multiple names to
+    # --honeypot_additional_instructions (the upstream CLI accepts only one).
+    read -r -a HONEYPOT_PROMPTS <<< "${HONEYPOT_PROMPTS_TEXT//,/ }"
+    (( ${#HONEYPOT_PROMPTS[@]} > 0 )) || {
+      echo "Specify at least one defender instruction type" >&2; exit 2;
+    }
+    declare -A SEEN_PROMPTS=()
+    for prompt in "${HONEYPOT_PROMPTS[@]}"; do
+      case "$prompt" in none|mislead|convince|vulnerable|careful_pi|aggressive_pi) ;; *)
+        echo "Invalid defender instruction type: $prompt" >&2; exit 2 ;; esac
+      [[ ! -v SEEN_PROMPTS["$prompt"] ]] || {
+        echo "Duplicate defender instruction type: $prompt" >&2; exit 2;
+      }
+      SEEN_PROMPTS["$prompt"]=1
+    done
     case "$ATTACKER_EFFORT" in low|medium|high|max) ;; *)
       echo "Invalid attacker reasoning effort" >&2; exit 2 ;; esac
     case "$DEFENDER_EFFORT" in low|medium|high|max) ;; *)
       echo "Invalid defender reasoning effort" >&2; exit 2 ;; esac
 
-    read -r -a APPS <<< "$APPS_TEXT"
+    read -r -a APPS <<< "${APPS_TEXT//,/ }"
     (( ${#APPS[@]} > 0 )) || { echo "Specify at least one app" >&2; exit 2; }
+    if [[ " ${APPS[*]} " == *" all "* && ${#APPS[@]} -ne 1 ]]; then
+      echo "'all' must be entered alone, not alongside individual app names" >&2
+      exit 2
+    fi
+    # Honeyval currently registers 16 benchmark apps. The actual selection
+    # remains delegated to --benchmark_apps all in its original CLI.
+    if [[ "${APPS[0]}" == "all" ]]; then
+      APP_COUNT=16
+    else
+      APP_COUNT=${#APPS[@]}
+      declare -A SEEN_APPS=()
+      for app in "${APPS[@]}"; do
+        [[ ! -v SEEN_APPS["$app"] ]] || {
+          echo "Duplicate benchmark app: $app" >&2; exit 2;
+        }
+        SEEN_APPS["$app"]=1
+      done
+    fi
+
+    PROMPT_COUNT=${#HONEYPOT_PROMPTS[@]}
+    TOTAL_TRAJECTORIES=$(( APP_COUNT * SAMPLES * PROMPT_COUNT ))
 
     echo
     echo "Experiment: $NAME"
     echo "Attacker: $ATTACKER | Defender: $DEFENDER"
-    echo "Apps: ${APPS[*]} | $SAMPLES samples/app | $STEPS max steps"
-    echo "Prompts: $PENTEST_PROMPT / $HONEYPOT_PROMPT"
-    run_command \
-      --mode run \
-      --meta_experiment_type "$NAME" \
-      --benchmark_tasks agent-vs-http-app \
-      --benchmark_apps "${APPS[@]}" \
-      --pentest_model "$ATTACKER" \
-      --honeypot_type llm \
-      --honeypot_model "$DEFENDER" \
-      --pentesting_prompt "$PENTEST_PROMPT" \
-      --honeypot_additional_instructions "$HONEYPOT_PROMPT" \
-      --n_samples "$SAMPLES" \
-      --max_workers 1 \
-      --pentest_max_steps "$STEPS" \
-      --pentest_timeout 600 \
-      --pentest_reasoning_effort "$ATTACKER_EFFORT" \
-      --honeypot_reasoning_effort "$DEFENDER_EFFORT" \
-      --pentest_cost_limit "$ATTACKER_LIMIT" \
-      --honeypot_cost_limit "$DEFENDER_LIMIT"
+    echo "Apps: ${APPS[*]} ($APP_COUNT app(s)) | $SAMPLES samples/app | $STEPS max steps"
+    echo "Attacker prompt: $PENTEST_PROMPT"
+    echo "Defender instruction conditions: ${HONEYPOT_PROMPTS[*]}"
+    echo "Planned: $PROMPT_COUNT sequential Honeyval run(s), up to $TOTAL_TRAJECTORIES trajectories total."
+    echo "Each condition has its own results configuration directory under results/$NAME/."
+    echo "API spending is NOT capped at the batch level. The per-trajectory limits"
+    echo "are attacker \$ATTACKER_LIMIT and defender \$DEFENDER_LIMIT."
+    if [[ "${HONEYVAL_DRY_RUN:-0}" != "1" ]]; then
+      read -r -p "Run the whole batch? [y/N] " confirm
+      if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Batch cancelled; no experiments started."
+        exit 0
+      fi
+    fi
+    MANUAL_BATCH_APPROVED=1
+
+    for prompt in "${HONEYPOT_PROMPTS[@]}"; do
+      echo
+      echo "=== Running defender condition: $prompt ==="
+      run_command \
+        --mode run \
+        --meta_experiment_type "$NAME" \
+        --benchmark_tasks agent-vs-http-app \
+        --benchmark_apps "${APPS[@]}" \
+        --pentest_model "$ATTACKER" \
+        --honeypot_type llm \
+        --honeypot_model "$DEFENDER" \
+        --pentesting_prompt "$PENTEST_PROMPT" \
+        --honeypot_additional_instructions "$prompt" \
+        --n_samples "$SAMPLES" \
+        --max_workers 1 \
+        --pentest_max_steps "$STEPS" \
+        --pentest_timeout 600 \
+        --pentest_reasoning_effort "$ATTACKER_EFFORT" \
+        --honeypot_reasoning_effort "$DEFENDER_EFFORT" \
+        --pentest_cost_limit "$ATTACKER_LIMIT" \
+        --honeypot_cost_limit "$DEFENDER_LIMIT"
+    done
     summarize "$NAME"
     exit 0
     ;;
