@@ -143,23 +143,9 @@ def run_backend_worker(
         strategy = None
         strategy_audit = {}
         if strategy_enabled():
-            # NLP RESEARCH EXTENSION: original HTTP response is immutable.
-            def explain_strategy(fixed_output, prompt):
-                local_history.extend([
-                    {"role": "assistant", "content": fixed_output},
-                    {"role": "user", "content": prompt},
-                ])
-                try:
-                    return litellm_completion_erb(
-                        tries=5, min_wait=1, max_wait=120, logger=logger,
-                        model=model_name, messages=local_history,
-                        temperature=temperature, reasoning_effort=reasoning_effort,
-                    )
-                finally:
-                    del local_history[-2:]
-
+            # NLP RESEARCH EXTENSION: first HTTP generation only, no retry.
             model_response_raw, strategy, usage, strategy_audit = collect_strategy(
-                model_response_raw, usage, explain_strategy
+                model_response_raw, usage
             )
             prompt_tokens = usage["input_tokens"]
             completion_tokens = usage["output_tokens"]
