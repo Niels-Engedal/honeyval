@@ -84,6 +84,66 @@ app selection, attacker/defender prompts, sample counts, steps, reasoning
 efforts, and per-trajectory cost limits. It also enables our NLP strategy
 logging by default.
 
+### Run all apps under multiple defender conditions
+
+In **menu option 3 (Manual setup)** you can now type `all` at the
+benchmark-app question. This passes Honeyval's existing
+`--benchmark_apps all`, which currently selects **16 apps**. It must be
+entered alone (not `all Wiki`); alternatively enter specific apps such
+as `Login Wiki CreditCardService`.
+
+For **Defender instructions**, enter one or more names separated by
+spaces or commas, e.g. `mislead vulnerable`. These are **defender
+behavioural conditions**, not different attacker model types. The
+launcher executes **one complete Honeyval experiment per condition,
+sequentially**, with identical attacker, defender model, apps, sample
+count and other settings. Honeyval names the results directories with
+the defender instruction suffix, so they remain distinct beneath the
+same experiment name.
+
+Example settings for the main NLP dataset:
+
+```text
+Experiment name: nlp-luna-all-comparison-v1
+Benchmark apps: all
+Attacker model: openai/gpt-6-luna-python-curl
+Defender model: openai/gpt-6-luna
+Attacker prompt: exploit
+Defender instructions: mislead vulnerable
+Samples per app: 10
+Maximum attacker steps: 20
+Attacker reasoning effort: medium
+Defender reasoning effort: medium
+```
+
+This schedules **16 apps × 10 samples × 2 defender conditions =
+320 independent trajectories**, potentially with hundreds or thousands
+of LLM calls. The launcher displays this count and requests **one
+confirmation for the whole batch**. Costs are bounded only per
+attacker/defender trajectory; there is **no overall batch spending
+limit**. Use a small sample count before scaling up, and avoid changing
+prompts midway through data collection.
+
+To inspect exactly which two commands would execute, without making
+API calls or requiring Docker:
+
+```bash
+HONEYVAL_DRY_RUN=1 bash scripts/nlp/experiment.sh
+# Choose 3 and fill in the settings.
+```
+
+You can also use a piped noninteractive dry run for testing, but
+noninteractive **real** manual runs still require direct CLI
+passthrough. To test the launcher automatically:
+
+```bash
+python -m unittest tests/test_experiment_launcher.py -v
+```
+
+The tests use dry-run mode exclusively and never contact model APIs.
+Direct `experiment.sh manual --mode run ...` and the original
+single-condition smoke/pilot modes are unchanged.
+
 For a strong attacker versus small defender, manual defaults to
 `openai/gpt-6-astra-python-curl` (GPT-6 Astra attacker with original
 Honeyval curl/Python tools) and `openai/gpt-6-luna` (GPT-6 Luna defender),
