@@ -19,6 +19,16 @@ The output contains `decisions.csv` (every model generation), `paired_exchanges.
 
 **Hybrid honeypot:** the FastAPI frontend handles some requests without invoking the defender LLM; therefore attacker and defender event counts legitimately differ. Pairing is by task-specific model-call timestamps, **not** by row index. Always inspect `warnings.txt`, especially if an action could make multiple HTTP requests or metadata is incomplete.
 
+## Strategy prompt versions
+
+The 23 October rationale-logging revision is tagged
+`strategic-rationale-v2` in the raw metadata and exported CSVs.
+Earlier pilot files have no such field and are labeled `unversioned`.
+Do not pool v1 and v2 strategy texts for one embedding analysis:
+script 03 checks this and exits on mixed versions. This matters because
+asking agents to explain how additional objectives affect their decisions
+may itself change what they do and what they report.
+
 ## Diagnose action formatting (script 02)
 
 The descriptive report includes an **attacker parsing-error diagnostic** and
