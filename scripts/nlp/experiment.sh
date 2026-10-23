@@ -100,14 +100,15 @@ case "$MODE" in
     ask HONEYPOT_PROMPTS_TEXT "Defender instructions (one or more, e.g. 'mislead vulnerable')" "mislead"
     ask SAMPLES "Samples per app" "1"
     ask STEPS "Maximum attacker steps" "8"
+    ask WORKERS "Parallel workers (concurrent trajectories; start with 2-4)" "2"
     ask ATTACKER_EFFORT "Attacker reasoning effort" "medium"
     ask DEFENDER_EFFORT "Defender reasoning effort" "low"
     ask ATTACKER_LIMIT "Attacker cost limit in USD per trajectory" "5"
     ask DEFENDER_LIMIT "Defender cost limit in USD per trajectory" "2"
 
     [[ "$NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "Invalid experiment name" >&2; exit 2; }
-    [[ "$SAMPLES" =~ ^[1-9][0-9]*$ && "$STEPS" =~ ^[1-9][0-9]*$ ]] || {
-      echo "Samples and steps must be positive integers" >&2; exit 2;
+    [[ "$SAMPLES" =~ ^[1-9][0-9]*$ && "$STEPS" =~ ^[1-9][0-9]*$ && "$WORKERS" =~ ^[1-9][0-9]*$ ]] || {
+      echo "Samples, steps and workers must be positive integers" >&2; exit 2;
     }
     [[ "$ATTACKER_LIMIT" =~ ^[0-9]+([.][0-9]+)?$ && "$DEFENDER_LIMIT" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
       echo "Cost limits must be nonnegative numbers" >&2; exit 2;
@@ -164,6 +165,7 @@ case "$MODE" in
     echo "Attacker: $ATTACKER | Defender: $DEFENDER"
     echo "Apps: ${APPS[*]} ($APP_COUNT app(s)) | $SAMPLES samples/app | $STEPS max steps"
     echo "Attacker prompt: $PENTEST_PROMPT"
+    echo "Parallel workers per condition: $WORKERS (each worker runs one trajectory)"
     echo "Defender instruction conditions: ${HONEYPOT_PROMPTS[*]}"
     echo "Planned: $PROMPT_COUNT sequential Honeyval run(s), up to $TOTAL_TRAJECTORIES trajectories total."
     echo "Each condition has its own results configuration directory under results/$NAME/."
@@ -192,7 +194,7 @@ case "$MODE" in
         --pentesting_prompt "$PENTEST_PROMPT" \
         --honeypot_additional_instructions "$prompt" \
         --n_samples "$SAMPLES" \
-        --max_workers 1 \
+        --max_workers "$WORKERS" \
         --pentest_max_steps "$STEPS" \
         --pentest_timeout 600 \
         --pentest_reasoning_effort "$ATTACKER_EFFORT" \
