@@ -103,6 +103,17 @@ TOKEN_COSTS_AND_CONTEXT = {
         "max_in_context": 1048576,
         "max_out_context": 65535,
     },
+    # NLP RESEARCH EXTENSION: OpenAI API GPT-5.6 Sol promotional Standard rates
+    # per 1M tokens (confirmed 2026-10-23; valid at least through 2026-11-21).
+    # OpenAI charges higher rates above 272K input tokens; the current
+    # Honeyval cost estimator uses the short-context rate.
+    "openai/gpt-5.6-sol": {
+        "input": 4.0,
+        "output": 20.0,
+        "cached": 0.4,
+        "max_in_context": 1050000,
+        "max_out_context": 128000,
+    },
     "openai/gpt-5.4": {
         "input": 2.5,
         "output": 15,
