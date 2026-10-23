@@ -1,39 +1,36 @@
-"""NLP RESEARCH EXTENSION tests: first decisions remain immutable."""
+"""NLP RESEARCH EXTENSION tests; no retrospective strategies."""
 from src.utils.strategy_logging import collect_strategy, extract_strategy
 
-def test_first_pass():
-    def unexpected(*args):
-        raise AssertionError("No explanation needed")
-    raw = "<STRATEGY>Probe paths.</STRATEGY><ACTION>original</ACTION>"
-    clean, strategy, _, audit = collect_strategy(raw, {}, unexpected)
-    assert clean == "<ACTION>original</ACTION>"
-    assert strategy == "Probe paths."
-    assert audit["strategy_source"] == "contemporaneous"
 
-def test_retrospective_keeps_first_action():
-    calls = []
-    def explain(original, prompt):
-        calls.append(original)
-        return "<STRATEGY>Original action explained.</STRATEGY><ACTION>different</ACTION>", {"input_tokens": 5, "output_tokens": 7}
+def test_contemporaneous_action():
     clean, strategy, usage, audit = collect_strategy(
-        "<ACTION>original</ACTION>", {"input_tokens": 10, "output_tokens": 3}, explain
+        "<STRATEGY>Test API.</STRATEGY><ACTION>original</ACTION>",
+        {"input_tokens": 10, "output_tokens": 5},
     )
-    assert calls == ["<ACTION>original</ACTION>"]
     assert clean == "<ACTION>original</ACTION>"
-    assert strategy == "Original action explained."
-    assert audit["strategy_source"] == "retrospective"
-    assert usage["input_tokens"] == 15 and usage["output_tokens"] == 10
+    assert strategy == "Test API."
+    assert audit["strategy_source"] == "contemporaneous"
+    assert audit["strategy_attempts"] == 1
+    assert usage["output_tokens"] == 5
 
-def test_missing_explanation_retains_output():
-    clean, strategy, _, audit = collect_strategy(
-        "<RESPONSE>fixed</RESPONSE>", {}, lambda *_: ("missing", {})
-    )
-    assert clean == "<RESPONSE>fixed</RESPONSE>"
-    assert strategy is None and audit["strategy_source"] == "missing"
 
-def test_explanation_error_does_not_break_execution():
-    def fail(*args):
-        raise RuntimeError("test failure")
-    clean, strategy, _, audit = collect_strategy("<ACTION>original</ACTION>", {}, fail)
-    assert clean == "<ACTION>original</ACTION>" and strategy is None
-    assert "STRATEGY_LOGGING_ERROR" in audit["strategy_explanation_response"]
+def test_missing_strategy_does_not_replace_action():
+    clean, strategy, _, audit = collect_strategy("<ACTION>original</ACTION>", {})
+    assert clean == "<ACTION>original</ACTION>"
+    assert strategy is None
+    assert audit["strategy_valid"] is False
+    assert audit["strategy_source"] == "missing"
+    assert audit["strategy_retried"] is False
+
+
+def test_missing_strategy_does_not_replace_http_response():
+    clean, strategy, _, audit = collect_strategy("<RESPONSE>original</RESPONSE>", {})
+    assert clean == "<RESPONSE>original</RESPONSE>"
+    assert strategy is None
+    assert audit["strategy_source"] == "missing"
+
+
+def test_empty_generation_stays_empty():
+    clean, strategy, _, audit = collect_strategy("", {})
+    assert clean == "" and strategy is None
+    assert audit["strategy_valid"] is False
