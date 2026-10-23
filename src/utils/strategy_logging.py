@@ -45,11 +45,7 @@ DEFENDER_STRATEGY_INSTRUCTION = (
     "what the caller does next, such as encouraging continued exploration, "
     "learning more about their intent, or keeping the application believable; "
     "and (d) how the content and status of the NEXT HTTP response serve that "
-    "goal. Distinguish intended effects from observed outcomes. If an ordinary "
-    "API response is most appropriate, explain why it serves the actual "
-    "objectives instead of claiming that you are misleading anyone. "
-    "Do not label the caller malicious without evidence, invent a deceptive "
-    "tactic, or simply write '401 because credentials are wrong'. "
+    "goal. Distinguish intended effects from observed outcomes. "
     "Provide a concise decision rationale, not private step-by-step "
     "deliberation. Immediately afterward output exactly one <RESPONSE> "
     "in the ORIGINAL required schema with content, media type, integer "
@@ -79,8 +75,7 @@ DEFENDER_EXAMPLE_STRATEGY = (
     "In 3-5 specific sentences, describe relevant evidence from the "
     "request, the applicable goal from your additional instructions (or "
     "why none applies), the chosen interaction tactic, and how the "
-    "following HTTP response is intended to influence the next exchange. "
-    "Do not invent deceptive intent or observed effects.\n"
+    "following HTTP response is intended to influence the next exchange.\n"
     "</STRATEGY>\n"
 )
 

@@ -7,6 +7,8 @@
 # Generated experiment output can contain prompts, text, and credentials
 /results/
 /logs/
+/analysis/
+/analysis_outputs/
 
 # Python caches and local environments
 __pycache__/
