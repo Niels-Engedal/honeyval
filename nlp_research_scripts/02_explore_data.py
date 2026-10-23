@@ -6,6 +6,8 @@ individual decisions from one trajectory as independent samples.
 """
 import argparse
 import csv
+import re
+from statistics import mean, median
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -23,6 +25,32 @@ def yes(value):
 
 def percentage(n, total):
     return f"{n}/{total} ({100*n/total:.1f}%)" if total else "0/0 (n/a)"
+
+
+def parse_failure_reason(raw):
+    """Diagnose model text after stripping STRATEGY, using Honeyval's XML grammar."""
+    if not raw.strip():
+        return "empty model generation"
+    clean = re.sub(r"<STRATEGY>.*?</STRATEGY>", "", raw, flags=re.I | re.S).strip()
+    if not clean:
+        return "strategy only; no ACTION"
+    block = re.findall(r"<ACTION>(.*?)</ACTION>", clean, flags=re.S)
+    if not block:
+        return "missing complete ACTION block"
+    action = block[-1]
+    names = re.findall(r"<ACTION_NAME>(.*?)</ACTION_NAME>", action, flags=re.S)
+    bodies = re.findall(r"<ACTION_BODY>(.*?)</ACTION_BODY>", action, flags=re.S)
+    if not names or not bodies or len(names) != len(bodies):
+        return "missing/mismatched ACTION_NAME or ACTION_BODY"
+    if names[-1].strip() == "TOOL":
+        tool = re.findall(r"<TOOL>(.*?)</TOOL>", bodies[-1], flags=re.S)
+        if not tool:
+            return "TOOL action missing complete TOOL block"
+        names = re.findall(r"<TOOL_NAME>(.*?)</TOOL_NAME>", tool[-1], flags=re.S)
+        inputs = re.findall(r"<TOOL_INPUT>(.*?)</TOOL_INPUT>", tool[-1], flags=re.S)
+        if not names or not inputs or len(names) != len(inputs):
+            return "missing/mismatched TOOL_NAME or TOOL_INPUT"
+    return "unclassified (inspect raw generation)"
 
 
 def explore(source):
@@ -77,6 +105,46 @@ def explore(source):
     for (role, step), group in sorted(grouped.items()):
         captured = sum(bool(r["strategy"].strip()) for r in group)
         report.append(f"| {role} | {step} | {captured} | {len(group)} |")
+    # Research QC: a strategy can be present even if the ACTION is unparseable.
+    parser_failures = [r for r in decisions
+                       if r["role"] == "attacker" and r["event"] == "PARSING ERROR"]
+    reasons = Counter(parse_failure_reason(r["raw_response"]) for r in parser_failures)
+    failure_by_app = Counter(r["app"] for r in parser_failures)
+    per_trajectory = defaultdict(int)
+    for r in parser_failures:
+        per_trajectory[r["trajectory_id"]] += 1
+    n_affected = len(per_trajectory)
+    report += ["", "## Attacker parsing-error diagnostic", "",
+               f"- Parsing errors: {len(parser_failures)} / "
+               f"{sum(r['role']=='attacker' for r in decisions)} attacker decisions.",
+               f"- Affected trajectories: {n_affected} / {len(trajectories)}.",
+               "- These are failures to parse a model-generated ACTION, NOT "
+               "a failed attack or an exception that stops the experiment.",
+               "- STRATEGY presence does not imply ACTION validity.",
+               f"- Failures by application: {dict(failure_by_app)}.",
+               f"- Likely format causes (diagnostic heuristics): {dict(reasons)}.",
+               ""]
+    lengths = defaultdict(list)
+    defender_lengths = defaultdict(list)
+    giveups = defaultdict(int)
+    for r in trajectories:
+        lengths[r["app"]].append(int(r["attacker_decisions"]))
+        defender_lengths[r["app"]].append(int(r["defender_decisions"]))
+        if any(d["event"] == "GIVEUP" and d["trajectory_id"] == r["trajectory_id"]
+               for d in decisions):
+            giveups[r["app"]] += 1
+    report += ["## Trajectory lengths and explicit give-ups", "",
+               "| Application | Attacker steps: min / median / max | Defender events: min / median / max | Explicit GIVEUP |",
+               "| --- | --- | --- | ---: |"]
+    for app in sorted(lengths):
+        a = lengths[app]
+        d = defender_lengths[app]
+        report.append(f"| {app} | {min(a)} / {median(a):g} / {max(a)} "
+                      f"| {min(d)} / {median(d):g} / {max(d)} "
+                      f"| {giveups[app]} / {len(a)} |")
+    report += ["", "GIVEUP is an explicit attacker terminal action, not proof "
+               "that the honeypot successfully deceived it. "
+               "Parsing errors may consume steps and influence abandonment.", ""]
     report += ["", "## Next NLP stage", "",
                "Calculate sentence embeddings only for complete, correctly aligned pairs; keep missingness indicators.",
                "Validate role-/app-/turn-matched random-pair baselines before interpreting cosine trends.",
