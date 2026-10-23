@@ -77,9 +77,60 @@ If Docker group changes are needed, `newgrp docker` starts another shell. Run `s
 bash scripts/nlp/experiment.sh
 ```
 
-Choose **smoke** (1 sample), **pilot** (10 samples), or **manual**. The script asks for a run name, sample count, and maximum attacker steps, then launches Honeyval and summarizes results. It assigns a timestamped name by default to avoid overwriting earlier runs. Docker image builds and API requests may take time; the progress bar only updates when a sample finishes.
+Choose **smoke** (1 sample), **pilot** (10 samples), or **manual**.
+Smoke and pilot retain their original GPT-5.4-mini / GPT-5.4-nano defaults.
+**Menu option 3 is now an interactive manual setup**, with editable models,
+app selection, attacker/defender prompts, sample counts, steps, reasoning
+efforts, and per-trajectory cost limits. It also enables our NLP strategy
+logging by default.
 
-To run noninteractively with the smoke defaults:
+For a strong attacker versus small defender, manual defaults to
+`openai/gpt-6-astra-python-curl` (GPT-6 Astra attacker with original
+Honeyval curl/Python tools) and `openai/gpt-6-luna` (GPT-6 Luna defender),
+with `exploit` / `mislead`. These are the October 2026 flagship and
+efficiency models respectively. `openai/gpt-6.1-sol-python-curl` is a
+lower-cost alternative attacker.
+
+Example interactive run:
+
+```bash
+cd /work/honeyval_project/honeyval
+bash scripts/nlp/experiment.sh
+# Enter 3, then accept/edit the defaults, and confirm with y.
+```
+
+For advanced scripts, the original full CLI passthrough still works:
+
+```bash
+bash scripts/nlp/experiment.sh manual --mode run --meta_experiment_type my-run ...
+```
+
+Or preview the assembled command **without running any API calls**:
+
+```bash
+HONEYVAL_DRY_RUN=1 bash scripts/nlp/experiment.sh
+# Choose 3, then fill out the fields.
+```
+
+Both interactive manual and direct passthrough use
+`HONEYVAL_LOG_STRATEGY=1` by default. To opt out, set
+`HONEYVAL_LOG_STRATEGY=0` explicitly.
+
+**GPT-6 support:** The NLP fork adds GPT-6 Astra, GPT-6.1 Sol, and GPT-6
+Luna to `src/utils/constants.py` for token-cost accounting and changes
+`src/utils/litellm_erb.py` so GPT-6 reasoning requests do not send
+unsupported custom `temperature` or `top_p`. Honeyval's original
+API-error backoff/retries remain intact. New models may require an updated
+LiteLLM installation and API model access; validate one trajectory before
+launching a batch. The framework uses Chat Completions with manually
+parsed XML tool actions (not OpenAI's native function-calling interface).
+
+**Costs:** The manual defaults limit each attacker trajectory to $5 and each
+defender trajectory to $2, not the total experiment. Pricing uses standard
+API rates as of October 2026 and is approximate; multiple apps and samples
+multiply the number of trajectories. Do not assume an overall spending cap.
+
+To run noninteractively with the original smoke defaults:
 
 ```bash
 bash scripts/nlp/experiment.sh smoke
