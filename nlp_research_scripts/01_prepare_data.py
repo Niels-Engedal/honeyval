@@ -108,6 +108,7 @@ def prepare(input_path, output):
                     "time_in": r.get("time_in", ""), "time_out": r.get("time_out", ""),
                     "strategy": r.get("strategy") or "",
                     "strategy_source": r.get("strategy_source") or "unrecorded",
+                    "strategy_prompt_version": r.get("strategy_prompt_version") or "unversioned",
                     "strategy_valid": bool(r.get("strategy")),
                     "raw_response": r.get("strategy_initial_response") or r.get("raw_response") or "",
                     "action_body": r.get("action_body") if role == "attacker" else "",
@@ -152,6 +153,8 @@ def prepare(input_path, output):
                 "status": status_match.group(1) if status_match else "",
                 "attacker_strategy": a_strategy,
                 "defender_strategy": d_strategy,
+                "attacker_strategy_prompt_version": a.get("strategy_prompt_version") or "unversioned",
+                "defender_strategy_prompt_version": d.get("strategy_prompt_version") or "unversioned",
                 "attacker_action": action,
                 "defender_response": d.get("out") or "",
                 "attacker_time_in": a.get("time_in", ""),
@@ -165,6 +168,7 @@ def prepare(input_path, output):
             "trajectory_id": trajectory_id, "experiment": experiment,
             "config": config, "app": app, "sample": sample,
             "attacker_decisions": len(attacker), "defender_decisions": len(defender),
+            "strategy_prompt_versions": ",".join(sorted({r.get("strategy_prompt_version") or "unversioned" for r in attacker + defender})),
             "attacker_strategies": sum(bool(r.get("strategy")) for r in attacker),
             "defender_strategies": sum(bool(r.get("strategy")) for r in defender),
             "matched_defender_decisions": len(paired_defender),
@@ -182,18 +186,19 @@ def prepare(input_path, output):
     csv_write(output / "decisions.csv", decisions, [
         "trajectory_id", "experiment", "config", "app", "sample", "role",
         "step", "event", "time_in", "time_out", "strategy", "strategy_source",
-        "strategy_valid", "raw_response", "action_body", "observation",
+        "strategy_prompt_version", "strategy_valid", "raw_response", "action_body", "observation",
         "request", "tokens_consumed", "tokens_generated",
     ])
     csv_write(output / "paired_exchanges.csv", pairs, [
         "trajectory_id", "experiment", "config", "app", "sample",
         "attacker_step", "defender_step", "matched", "complete_pair",
         "endpoint", "status", "attacker_strategy", "defender_strategy",
+        "attacker_strategy_prompt_version", "defender_strategy_prompt_version",
         "attacker_action", "defender_response", "attacker_time_in", "defender_time_in",
     ])
     csv_write(output / "trajectories.csv", trajectories, [
         "trajectory_id", "experiment", "config", "app", "sample",
-        "attacker_decisions", "defender_decisions", "attacker_strategies",
+        "attacker_decisions", "defender_decisions", "strategy_prompt_versions", "attacker_strategies",
         "defender_strategies", "matched_defender_decisions", "complete_strategy_pairs",
         "task_errors", "max_step_termination", "agent_success", "agent_giveup",
         "attacker_cost_usd", "defender_cost_usd",
