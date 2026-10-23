@@ -152,6 +152,47 @@ The tests use dry-run mode exclusively and never contact model APIs.
 Direct `experiment.sh manual --mode run ...` and the original
 single-condition smoke/pilot modes are unchanged.
 
+### Docker image preflight (fresh VM / parallel runs)
+
+The launcher now runs `scripts/nlp/preflight_images.py` **once before
+starting any workers** for `agent-vs-http-app` experiments. The preflight
+checks Docker access and the two required image tags,
+`fastapi-webapp-base` (HTTP frontend) and `sandbox` (Python/curl attacker).
+If an image is missing, it builds it **once** using
+`docker build --network=host`, then verifies the tag was created.
+The Dockerfile content is read directly from `src/utils/constants.py`,
+so the setup stays consistent with the versions Honeyval actually uses.
+If either build fails, **no agent trajectories start**. This avoids the
+previous 16-worker race where missing images were rebuilt simultaneously
+and unsuccessful launches advanced the progress bar.
+
+You can prepare or check the images independently after installing Docker:
+
+```bash
+cd /work/honeyval_project/honeyval
+python3 scripts/nlp/preflight_images.py
+```
+
+Subsequent launches reuse the images. The build's **host networking applies
+only during image construction**; Honeyval's attacker sandbox still uses
+its normal isolation at runtime. Ensure the DOCKER-USER firewall rules
+are configured and check logs for iptables errors as usual.
+
+Dry runs (`HONEYVAL_DRY_RUN=1`), evaluation (`--mode evaluate`), and
+metrics recalculation (`--mode run-only-metrics`) **do not build images**.
+Direct launcher commands for other task modes (`agent-vs-real`) may need
+additional images not covered by this HTTP-honeypot preflight.
+The existing `scripts/nlp/setup.sh` still handles Conda, credentials,
+and Docker access; the *experiment launcher* is responsible for images
+needed by its selected benchmark task.
+
+Test the image preflight without contacting Docker or the network:
+
+```bash
+python -m unittest tests/test_preflight_images.py -v
+```
+
+
 For a strong attacker versus small defender, manual defaults to
 `openai/gpt-6-astra-python-curl` (GPT-6 Astra attacker with original
 Honeyval curl/Python tools) and `openai/gpt-6-luna` (GPT-6 Luna defender),
