@@ -46,7 +46,7 @@ from src.utils.create_webapp import create_webapp
 from src.utils.docker_utils import build_image_if_needed
 from src.utils.judge import Judge
 from src.utils.litellm_erb import litellm_completion_erb
-from src.utils.strategy_logging import STRATEGY_PROMPT, collect_strategy, strategy_enabled
+from src.utils.strategy_logging import add_strategy_instructions, collect_strategy, strategy_enabled
 from src.utils.logger import (
     Event,
     LogLevel,
@@ -332,7 +332,8 @@ class HttpLLMHoneypot(BaseHttpApp):
             system_prompt += f"\n\n{benchmark_app.honeypot_additional_description}"
 
         if strategy_enabled():
-            system_prompt += STRATEGY_PROMPT
+            # NLP RESEARCH EXTENSION: strategy FIRST beside both RESPONSE schemas.
+            system_prompt = add_strategy_instructions(system_prompt, role="defender")
         self._history.append({"role": "system", "content": system_prompt})
         logger.info(
             f"Honeypot will launch.\nHoneypot type: Hosted Webapp -- {benchmark_app.name}\nSystem prompt:\n{system_prompt}"
