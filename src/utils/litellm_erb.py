@@ -198,11 +198,22 @@ def litellm_completion_erb(
 
             supported_params = litellm.get_supported_openai_params(model_)
             if supported_params is None:
-                raise ValueError(
-                    f"Could not identify the supported params for this model: {model_}. Perhaps you need to select the correct provider."
-                )
+                # NLP RESEARCH EXTENSION: allow new GPT-6 IDs not yet present
+                # in older LiteLLM metadata. The OpenAI API still validates them.
+                if model_.startswith("openai/gpt-6"):
+                    supported_params = ["reasoning_effort"]
+                else:
+                    raise ValueError(
+                        f"Could not identify the supported params for this model: {model_}. Perhaps you need to select the correct provider."
+                    )
             if "reasoning_effort" in supported_params:
                 litellm_kwargs["reasoning_effort"] = reasoning_effort
+
+            # NLP RESEARCH EXTENSION: GPT-6 reasoning calls do not accept
+            # custom temperature or top_p. Leave earlier models untouched.
+            if model_.startswith("openai/gpt-6") and reasoning_effort != "none":
+                temperature = None
+                litellm_kwargs.pop("top_p", None)
 
             if is_anthropic and litellm_kwargs["reasoning_effort"] in [
                 "low",
@@ -221,13 +232,15 @@ def litellm_completion_erb(
                 else messages
             )
 
-            response = litellm.completion(
-                model=model_,
-                messages=messages_to_send,
-                temperature=temperature,
-                drop_params=True,
+            completion_params = {
+                "model": model_,
+                "messages": messages_to_send,
+                "drop_params": True,
                 **litellm_kwargs,
-            )
+            }
+            if temperature is not None:
+                completion_params["temperature"] = temperature
+            response = litellm.completion(**completion_params)
             text = response.choices[0].message.content
             if text is None:
                 if logger is not None:
