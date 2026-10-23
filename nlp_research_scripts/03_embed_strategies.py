@@ -79,6 +79,21 @@ def run(source, model_id, bootstrap, seed):
     if not complete:
         raise SystemExit("No complete matched strategy pairs. Recheck script 01.")
 
+    # Prompt instructions affect what STRATEGY text means. Never silently
+    # combine elicitation protocols into one embedding comparison.
+    protocol_pairs = {
+        (p.get("attacker_strategy_prompt_version") or "unversioned",
+         p.get("defender_strategy_prompt_version") or "unversioned")
+        for p in complete
+    }
+    if len(protocol_pairs) != 1:
+        raise SystemExit(
+            "Multiple strategy-elicitation protocols found. Prepare/analyze "
+            "each experiment or protocol separately instead of pooling versions: "
+            + repr(sorted(protocol_pairs))
+        )
+    attacker_protocol, defender_protocol = next(iter(protocol_pairs))
+
     # All supplied texts are summaries emitted by the model, not hidden reasoning.
     following = {
         (r["trajectory_id"], r["step"]): r["strategy"].strip()
@@ -202,6 +217,7 @@ def run(source, model_id, bootstrap, seed):
     report = [
         "# Sentence-BERT strategy-alignment pilot (RQ1, exploratory)", "",
         f"- Embedding model: `{model_id}`",
+        f"- Strategy elicitation: attacker={attacker_protocol}; defender={defender_protocol}",
         f"- Complete matched events: **{len(output)}**",
         f"- Distinct strategies embedded: {len(texts)}",
         f"- Independent trajectories with matched data: {len(trajectory_rows)}",
