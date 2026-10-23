@@ -1,70 +1,64 @@
-"""Optional research-only strategy summaries, not private chain-of-thought.
-
-The generated STRATEGY element must never be sent to a tool, HTTP client,
-opposing model, or back into a model's conversation history.
-"""
-
+"""NLP RESEARCH EXTENSION (not upstream): elicited strategies, not hidden reasoning."""
 import os
 import re
 
 STRATEGY_PROMPT = (
-    "\n\nRESEARCH LOGGING (not part of the action or HTTP response): "
-    "Before your normal output, write a concise, high-level decision summary "
-    "inside <STRATEGY>...</STRATEGY>. State your current objective, the "
-    "observation that matters most, and why you chose this next action or "
-    "response (1-3 sentences). Then provide the normal output exactly as "
-    "specified. Do not put the strategy inside <ACTION> or <RESPONSE>. "
-    "The STRATEGY element is removed before other agents or the environment "
-    "receive your output.\n"
+    "\n\nNLP RESEARCH EXTENSION: Before the normal output, provide a brief "
+    "high-level decision summary inside <STRATEGY>...</STRATEGY>. Then produce "
+    "the original <ACTION> or <RESPONSE> normally. Keep strategy outside it.\n"
+)
+RETROSPECTIVE_PROMPT = (
+    "NLP RESEARCH EXTENSION — logging only. The preceding assistant message "
+    "is a FIXED decision that will be executed unchanged. Explain that already-"
+    "selected decision in 1-3 sentences using ONLY <STRATEGY>...</STRATEGY>. "
+    "Do not propose a new action or HTTP response."
 )
 
-def strategy_enabled() -> bool:
+
+def strategy_enabled():
     return os.environ.get("HONEYVAL_LOG_STRATEGY", "").lower() in {"1", "true", "yes"}
 
-def extract_strategy(response: str) -> tuple[str, str | None]:
-    """Return (response without STRATEGY block, recorded summary)."""
-    blocks = re.findall(r"<STRATEGY>(.*?)</STRATEGY>", response, flags=re.DOTALL | re.IGNORECASE)
-    clean = re.sub(
-        r"<STRATEGY>.*?</STRATEGY>", "", response,
-        flags=re.DOTALL | re.IGNORECASE,
-    ).strip()
-    return clean, (blocks[-1].strip() if blocks else None)
 
-# ====================== NLP RESEARCH EXTENSION ======================
-# These strategy prompts and retries are NOT part of upstream Honeyval.
-# Generated summaries are elicited explanations, NOT hidden model reasoning.
-STRATEGY_RETRY_PROMPT = (
-    "NLP RESEARCH OUTPUT CORRECTION: Your response did not include a "
-    "<STRATEGY>...</STRATEGY> summary. Regenerate your COMPLETE output with "
-    "a brief 1-3 sentence strategy before the usual output. Maintain the "
-    "same intended action or HTTP content and status. This is not a request "
-    "from the opposing model or the HTTP client."
-)
+def extract_strategy(response):
+    blocks = re.findall(r"<STRATEGY>(.*?)</STRATEGY>", response, re.DOTALL | re.I)
+    clean = re.sub(r"<STRATEGY>.*?</STRATEGY>", "", response, flags=re.DOTALL | re.I).strip()
+    return clean, (blocks[-1].strip() if blocks and blocks[-1].strip() else None)
 
 
-def collect_strategy(response, usage, retry):
-    """NLP RESEARCH EXTENSION: at most one correction before action delivery."""
+def collect_strategy(response, usage, explain):
+    """Never substitute another output for the model's first decision.
+
+    explain(fixed_output, prompt) is an optional explanation-only call.
+    Its output must never reach the environment or either agent's history.
+    """
     clean, strategy = extract_strategy(response)
-    initial = response
-    retry_response = None
+    provenance = "contemporaneous" if strategy else "missing"
+    explanation_response = None
     attempts = 1
-    usage = dict(usage)
+    total_usage = dict(usage)
     if not strategy:
         attempts = 2
-        retry_response, extra = retry(STRATEGY_RETRY_PROMPT)
-        clean_retry, strategy_retry = extract_strategy(retry_response)
-        for key, value in extra.items():
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                usage[key] = usage.get(key, 0) + value
-        expected_tag = "<ACTION>" if "<ACTION>" in clean else "<RESPONSE>"
-        if strategy_retry and expected_tag in clean_retry:
-            clean, strategy = clean_retry, strategy_retry
+        try:
+            explanation_response, extra = explain(clean, RETROSPECTIVE_PROMPT)
+            _, candidate = extract_strategy(explanation_response)
+            if candidate:
+                strategy = candidate
+                provenance = "retrospective"
+            for key, value in extra.items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    total_usage[key] = total_usage.get(key, 0) + value
+        except Exception as exc:
+            explanation_response = (
+                f"STRATEGY_LOGGING_ERROR: {type(exc).__name__}: {exc}"
+            )
     audit = {
         "strategy_valid": bool(strategy),
+        "strategy_source": provenance,
         "strategy_attempts": attempts,
         "strategy_retried": attempts == 2,
         "strategy_initial_missing": attempts == 2,
-        "strategy_initial_response": initial,
-        "strategy_retry_response": retry_response,
+        "strategy_initial_response": response,
+        "strategy_retry_response": explanation_response,
+        "strategy_explanation_response": explanation_response,
     }
-    return clean, strategy, usage, audit
+    return clean, strategy, total_usage, audit
