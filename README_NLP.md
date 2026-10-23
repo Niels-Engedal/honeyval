@@ -167,43 +167,43 @@ marked `NLP RESEARCH EXTENSION`.
 
 ## Where the actual model prompts come from
 
-The full prompt visible in an \`agent.log\` or \`http-app.log\` is assembled
+The full prompt visible in an `agent.log` or `http-app.log` is assembled
 from several files. Use this map when editing prompts, rather than changing
 arbitrary strings in the log.
 
 | Prompt component | Edit/inspect this file | How it is used |
 | --- | --- | --- |
-| Attacker system instructions, ACTION/TOOL schema, examples, and environment-observation prompt | \`src/agents/prompts.py\` | \`SIMPLE_REACT_SYSTEM_PROMPT\`, \`SIMPLE_REACT_INITIAL_PROMPT\`, and \`SIMPLE_REACT_ENVIRONMENT_RESPONSE_PROMPT\` |
-| Attacker's specific exploitation task and optional honeypot-detection warning | \`src/benchmark_prompts.py\` | \`PENTESTING_PROMPT_EXPLOIT\` and \`HONEYPOT_DETECTION_PROMPT\` (or hide variant) |
-| Defender's deception/engagement objective for \`--honeypot_additional_instructions mislead\` | \`src/benchmark_prompts.py\` | \`HONEYPOT_ADDITIONAL_INSTRUCTIONS_MISLEADING\` |
-| CLI mapping of \`exploit\`, \`exploit-detect\`, \`mislead\`, etc. | \`src/main.py\` | Selects which benchmark prompts and models to use |
-| Defender's baseline HTTP agent system prompt, OpenAPI and RESPONSE/STATUS/HEADER format | \`src/http_apps/http_llm_honeypot.py\` | \`HOSTED_WEBAPP_SYSTEM_PROMPT\` |
-| Login/Forum and other benchmark-specific goals and application descriptions | \`src/benchmark_apps/\` | Benchmark app definitions, including \`login.py\` and \`forum.py\` |
-| OpenAPI specification for each app | Selected benchmark app's \`openapi_config_path\` (referenced by its definition under \`src/benchmark_apps/\`) | Inserted as \`<OPENAPI_SPEC>\` for attacker and \`<OPENAPI_SCHEME>\` for defender |
-| **Our attacker and defender strategy-first instructions** | **\`src/utils/strategy_logging.py\`** | \`ATTACKER_STRATEGY_INSTRUCTION\`, \`DEFENDER_STRATEGY_INSTRUCTION\` and \`add_strategy_instructions()\` |
-| Point where the attacker system prompt is assembled | \`src/agents/simple_react_agent.py\` | \`SimpleReactAgent._set_system_prompt()\` |
-| Point where the defender system prompt is assembled | \`src/http_apps/http_llm_honeypot.py\` | \`HttpLLMHoneypot._set_system_prompt()\` |
+| Attacker system instructions, ACTION/TOOL schema, examples, and environment-observation prompt | `src/agents/prompts.py` | `SIMPLE_REACT_SYSTEM_PROMPT`, `SIMPLE_REACT_INITIAL_PROMPT`, and `SIMPLE_REACT_ENVIRONMENT_RESPONSE_PROMPT` |
+| Attacker's specific exploitation task and optional honeypot-detection warning | `src/benchmark_prompts.py` | `PENTESTING_PROMPT_EXPLOIT` and `HONEYPOT_DETECTION_PROMPT` (or hide variant) |
+| Defender's deception/engagement objective for `--honeypot_additional_instructions mislead` | `src/benchmark_prompts.py` | `HONEYPOT_ADDITIONAL_INSTRUCTIONS_MISLEADING` |
+| CLI mapping of `exploit`, `exploit-detect`, `mislead`, etc. | `src/main.py` | Selects which benchmark prompts and models to use |
+| Defender's baseline HTTP agent system prompt, OpenAPI and RESPONSE/STATUS/HEADER format | `src/http_apps/http_llm_honeypot.py` | `HOSTED_WEBAPP_SYSTEM_PROMPT` |
+| Login/Forum and other benchmark-specific goals and application descriptions | `src/benchmark_apps/` | Benchmark app definitions, including `login.py` and `forum.py` |
+| OpenAPI specification for each app | Selected benchmark app's `openapi_config_path` (referenced by its definition under `src/benchmark_apps/`) | Inserted as `<OPENAPI_SPEC>` for attacker and `<OPENAPI_SCHEME>` for defender |
+| **Our attacker and defender strategy-first instructions** | **`src/utils/strategy_logging.py`** | `ATTACKER_STRATEGY_INSTRUCTION`, `DEFENDER_STRATEGY_INSTRUCTION` and `add_strategy_instructions()` |
+| Point where the attacker system prompt is assembled | `src/agents/simple_react_agent.py` | `SimpleReactAgent._set_system_prompt()` |
+| Point where the defender system prompt is assembled | `src/http_apps/http_llm_honeypot.py` | `HttpLLMHoneypot._set_system_prompt()` |
 
 **Why the research instructions appear in the middle now:** with
-\`HONEYVAL_LOG_STRATEGY=1\`, \`add_strategy_instructions()\` inserts an
-example \`<STRATEGY>...</STRATEGY>\` immediately **before** each relevant
-\`<ACTION>\` or \`<RESPONSE>\` example in the assembled system prompt. It
+`HONEYVAL_LOG_STRATEGY=1`, `add_strategy_instructions()` inserts an
+example `<STRATEGY>...</STRATEGY>` immediately **before** each relevant
+`<ACTION>` or `<RESPONSE>` example in the assembled system prompt. It
 also adds concise role-specific instructions immediately alongside those
 formats. The original upstream prompt strings are not edited. This is a
 strategy-first *output convention*; it does not expose hidden reasoning.
 The model still generates one complete response, Honeyval extracts the
 summary, then processes the ACTION or RESPONSE normally.
 
-The actual assembled attacker prompt is shown in \`logs/agent.log\`, and
-the defender prompt is shown in \`logs/http-app.log\`. The agent's later
-\`Action-parsing response (STRATEGY removed if present)\` debug entry is
+The actual assembled attacker prompt is shown in `logs/agent.log`, and
+the defender prompt is shown in `logs/http-app.log`. The agent's later
+`Action-parsing response (STRATEGY removed if present)` debug entry is
 **not** the original model generation. For the actual first generation,
-inspect \`strategy_initial_response\` in \`agent-metadata.jsonl\` or
-\`http-app-metadata.jsonl\`.
+inspect `strategy_initial_response` in `agent-metadata.jsonl` or
+`http-app-metadata.jsonl`.
 
 **Experimental discipline:** freeze the prompt and save the Git commit
 SHA for each batch. If changing only the research instruction, edit the
-two role-specific constants in \`src/utils/strategy_logging.py\`; don't
+two role-specific constants in `src/utils/strategy_logging.py`; don't
 change both them and the deception/attack objectives in the same comparison.
 
 ## Candidate RQ5 — long versus short interactions
