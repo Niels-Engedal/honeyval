@@ -129,35 +129,37 @@ grep -R 'iptables insert failed' results/<experiment-name> --include='*.log' || 
 
 Project changes live on `feature/interaction-logging` until the draft PR is validated. Record the Git commit hash and experimental parameters when collecting data for analysis.
 
-## NLP RESEARCH EXTENSION — fixed decisions and strategy provenance
+## NLP RESEARCH EXTENSION — contemporaneous strategies only
 
-This section documents CUSTOM research additions, NOT upstream Honeyval.
-The guided smoke/pilot launcher enables HONEYVAL_LOG_STRATEGY=1. Manual and
-direct runs must set that environment variable explicitly. Honeyval's original
-attacker and defender objectives, including mislead when selected, are retained.
+**CUSTOM research extension, not upstream Honeyval.** Since the 23 October 2026
+protocol revision, each LLM makes exactly **one decision generation**.
+We extract an optional `<STRATEGY>...</STRATEGY>` summary from that
+generation and strip the tag before normal action/HTTP processing.
 
-**Protocol updated 23 October 2026:** Our earlier research-only retry
-regenerated a complete model response and sometimes CHANGED the chosen action.
-Therefore, older pilot data are subject to an action-regeneration confound.
+If the model omits a strategy, Honeyval **does not retry, regenerate, or
+request a retrospective explanation**. The original action or HTTP response
+still proceeds normally. We record `strategy=null`,
+`strategy_valid=false`, and `strategy_source="missing"`. A malformed or
+empty action stays malformed/empty and generates no attacker HTTP request.
+The defender only generates an HTTP response if a request actually reaches it.
 
-**Current procedure:** The FIRST model generation is ALWAYS the fixed action
-or HTTP response (after stripping its STRATEGY tag). If a strategy is missing,
-one optional second model call only EXPLAINS that fixed decision. Its output
-is never executed, returned as an HTTP response, or added to persistent
-participant conversation histories. Failure to obtain an explanation never
-replaces or prevents the first decision.
+For successful contemporaneous capture, `strategy_source="contemporaneous"`.
+Old audit fields remain for backwards compatibility: `strategy_attempts=1`,
+`strategy_retried=false`, and both `strategy_retry_response` and
+`strategy_explanation_response` are null in NEW runs.
 
-strategy_source is contemporaneous, retrospective, or missing. Records
-also retain strategy_valid, strategy_attempts, strategy_retried (legacy name),
-strategy_initial_response, strategy_retry_response (legacy name), and
-strategy_explanation_response. The latter two capture only explanations in
-new runs. Keep protocol version or Git SHA with each experiment; do not pool
-old and new runs uncritically. Retrospective statements are elicited
-self-reports, NOT observations of hidden model reasoning.
+**Do not mix protocols without distinction.** Earlier pilot datasets used
+action-changing complete-output retries or retrospective explanation-only
+calls. Those records retain their original strategy provenance and need
+separate interpretation. Always save the experiment's Git commit hash.
+Strategies are elicited self-reports, not access to hidden model reasoning.
 
-All implementation changes are marked NLP RESEARCH EXTENSION in
-src/utils/strategy_logging.py, src/agents/simple_react_agent.py, and
-src/http_apps/http_llm_honeypot.py. No sandbox networking code changed.
+Smoke/pilot via `scripts/nlp/experiment.sh` enables
+`HONEYVAL_LOG_STRATEGY=1` automatically. Direct/manual runs must set it
+explicitly. Existing Honeyval attacker and honeypot instructions remain
+unchanged except for the strategy logging requirement. Our code additions are
+marked `NLP RESEARCH EXTENSION`.
+
 ## Inspect strategy completeness after any run
 
 Change the experiment name below, then run from the repository root:
