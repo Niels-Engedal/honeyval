@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "scripts/nlp/experiment.sh"
 
-# The twelve answers in the order manual setup requests them.
+# The thirteen answers in the order manual setup requests them.
 DEFAULT_ANSWERS = [
     "nlp-launcher-unit-test",
     "all",
@@ -19,6 +19,7 @@ DEFAULT_ANSWERS = [
     "mislead vulnerable",
     "10",
     "20",
+    "4",
     "medium",
     "medium",
     "5",
@@ -29,7 +30,7 @@ DEFAULT_ANSWERS = [
 def dry_run(**overrides):
     names = [
         "name", "apps", "attacker", "defender", "pentest",
-        "defender_conditions", "samples", "steps", "attacker_effort",
+        "defender_conditions", "samples", "steps", "workers", "attacker_effort",
         "defender_effort", "attacker_limit", "defender_limit",
     ]
     answers = dict(zip(names, DEFAULT_ANSWERS))
@@ -54,6 +55,8 @@ class ExperimentLauncherTests(unittest.TestCase):
         self.assertIn("up to 320 trajectories total", result.stdout)
         self.assertEqual(result.stdout.count("DRY RUN: nothing started."), 2)
         self.assertIn("--benchmark_apps all", result.stdout)
+        self.assertIn("Parallel workers per condition: 4", result.stdout)
+        self.assertEqual(result.stdout.count("--max_workers 4"), 2)
         self.assertIn("--honeypot_additional_instructions mislead", result.stdout)
         self.assertIn("--honeypot_additional_instructions vulnerable", result.stdout)
         self.assertIn("attacker USD 5 and defender USD 2", result.stdout)
@@ -70,6 +73,19 @@ class ExperimentLauncherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("up to 1 trajectories total", result.stdout)
         self.assertEqual(result.stdout.count("DRY RUN: nothing started."), 1)
+
+    def test_workers_can_be_one(self):
+        result = dry_run(apps="Login", defender_conditions="mislead", workers="1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("--max_workers 1", result.stdout)
+
+    def test_invalid_workers_rejected(self):
+        for workers in ("0", "-1", "four", "1.5"):
+            with self.subTest(workers=workers):
+                result = dry_run(workers=workers)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("Samples, steps and workers must be positive integers", result.stderr)
+                self.assertNotIn("DRY RUN: nothing started.", result.stdout)
 
     def test_duplicate_condition_rejected(self):
         result = dry_run(defender_conditions="mislead mislead")
