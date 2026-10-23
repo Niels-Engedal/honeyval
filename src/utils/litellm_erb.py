@@ -198,9 +198,9 @@ def litellm_completion_erb(
 
             supported_params = litellm.get_supported_openai_params(model_)
             if supported_params is None:
-                # NLP RESEARCH EXTENSION: allow new GPT-6 IDs not yet present
+                # NLP RESEARCH EXTENSION: allow new GPT-6 / GPT-5.6 IDs not yet present
                 # in older LiteLLM metadata. The OpenAI API still validates them.
-                if model_.startswith("openai/gpt-6"):
+                if model_.startswith(("openai/gpt-6", "openai/gpt-5.6")):
                     supported_params = ["reasoning_effort"]
                 else:
                     raise ValueError(
@@ -209,9 +209,9 @@ def litellm_completion_erb(
             if "reasoning_effort" in supported_params:
                 litellm_kwargs["reasoning_effort"] = reasoning_effort
 
-            # NLP RESEARCH EXTENSION: GPT-6 reasoning calls do not accept
+            # NLP RESEARCH EXTENSION: GPT-6 / GPT-5.6 reasoning calls do not accept
             # custom temperature or top_p. Leave earlier models untouched.
-            if model_.startswith("openai/gpt-6") and reasoning_effort != "none":
+            if model_.startswith(("openai/gpt-6", "openai/gpt-5.6")) and reasoning_effort != "none":
                 temperature = None
                 litellm_kwargs.pop("top_p", None)
 
