@@ -86,8 +86,8 @@ case "$MODE" in
       run_command "$@"
       exit 0
     fi
-    if [[ ! -t 0 ]]; then
-      echo "Manual mode needs a terminal. Alternatively: experiment.sh manual --mode run ..." >&2
+    if [[ ! -t 0 && "${HONEYVAL_DRY_RUN:-0}" != "1" ]]; then
+      echo "Manual mode needs a terminal for real runs. Alternatively: experiment.sh manual --mode run ..." >&2
       exit 2
     fi
 
@@ -168,7 +168,7 @@ case "$MODE" in
     echo "Planned: $PROMPT_COUNT sequential Honeyval run(s), up to $TOTAL_TRAJECTORIES trajectories total."
     echo "Each condition has its own results configuration directory under results/$NAME/."
     echo "API spending is NOT capped at the batch level. The per-trajectory limits"
-    echo "are attacker \$ATTACKER_LIMIT and defender \$DEFENDER_LIMIT."
+    echo "are attacker USD $ATTACKER_LIMIT and defender USD $DEFENDER_LIMIT."
     if [[ "${HONEYVAL_DRY_RUN:-0}" != "1" ]]; then
       read -r -p "Run the whole batch? [y/N] " confirm
       if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
