@@ -112,13 +112,21 @@ Attacker prompt: exploit
 Defender instructions: mislead vulnerable
 Samples per app: 10
 Maximum attacker steps: 20
+Parallel workers: 4
 Attacker reasoning effort: medium
 Defender reasoning effort: medium
 ```
 
 This schedules **16 apps × 10 samples × 2 defender conditions =
 320 independent trajectories**, potentially with hundreds or thousands
-of LLM calls. The launcher displays this count and requests **one
+of LLM calls. You can select **Parallel workers** in the manual menu;
+this sets Honeyval's existing `--max_workers` option and runs that many
+independent trajectories concurrently **within one defender condition**.
+The launcher defaults to **2** workers, and **2–4** is a reasonable
+starting range on a modest UCloud VM. More workers increase Docker/container
+and memory pressure, simultaneous API traffic, and possible rate-limiting;
+parallelism improves throughput but does not reduce per-trajectory token cost.
+The defender conditions themselves still run sequentially. The launcher displays this count and requests **one
 confirmation for the whole batch**. Costs are bounded only per
 attacker/defender trajectory; there is **no overall batch spending
 limit**. Use a small sample count before scaling up, and avoid changing
