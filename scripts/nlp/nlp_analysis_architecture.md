@@ -52,8 +52,8 @@ Currently we expect to analyse each of the questions on the following subsets an
 |----|-----------|------------------------------------------|---------------------------------------------------------------------------------------------|
 | 1  | all apps  | --statement_level                        |  Linear Mixed-Effects Model per agent                                                       |
 | 2  | all apps  | --statement_level                        | Linear Mixed-Effects Model per agent                                                        |
-| 3  | all apps  | --statement_level                        | Cross-Classified Linear Mixed-Effects Model                                                 |
-| 4  | all apps  | --statement_level                        | Cross-Classified Linear Mixed-Effects Model                                                 |
+| 3  | all apps  | --statement_level                        | Repeated Measures Correlation                                                |
+| 4  | all apps  | --statement_level                        | Repeated Measures Correlation                                                |
 | 5  | all apps  | --agent <br>or --interaction<br> or both |  Generalized Linear Mixed-Effects Model per metric <br> (if --agent then per agent as well) |
 
 If the above is what we decide on we only need necessary subsets and levels for these analyses. I have not figured out how we correct for muliple comparisons for the above proposed statistical tests and if we should perform fever statistical tests to decrease the chances of multiple comparison issues by instead only choosing the most important tests. 
