@@ -56,7 +56,36 @@ Currently we expect to analyse each of the questions on the following subsets an
 | 4  | all apps  | --statement_level                        | Repeated Measures Correlation                                                |
 | 5  | all apps  | --agent <br>or --interaction<br> or both |  Generalized Linear Mixed-Effects Model per metric <br> (if --agent then per agent as well) |
 
-If the above is what we decide on we only need necessary subsets and levels for these analyses. I have not figured out how we correct for muliple comparisons for the above proposed statistical tests and if we should perform fever statistical tests to decrease the chances of multiple comparison issues by instead only choosing the most important tests. 
+If the above is what we decide on we only need necessary subsets and levels for these analyses. We have not figured out how we correct for muliple comparisons for the above proposed statistical tests and if we should perform fever statistical tests to decrease the chances of multiple comparison issues by instead only choosing the most important tests. 
+
+How could each of the statistical models look:
+
+**RQ1:**
+
+$$EnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{app(jk)} + \epsilon_{ijk}$$ 
+
+$EnticingnessCVP_{ijk}$: Enticingness concept vector projection score for statement *i* within run *k* and application *j*
+$\beta_0$: baseline intercept
+$\beta_1$: fixed effect of target prompt
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
+$u_{app(jk)}$: the nested random intercept for each run *k* within application *j*
+$\epsilon_{ijk}$: residual error
+
+**RQ2:**
+
+$$BelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{app(jk)} + \epsilon_{ijk}$$ 
+
+$EnticingnessCVP_{ijk}$: Believability concept vector projection score for statement *i* within run *k* and application *j*
+$\beta_0$: baseline intercept
+$\beta_1$: fixed effect of target prompt
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
+$u_{app(jk)}$: the nested random intercept for each run *k* within application *j*
+$\epsilon_{ijk}$: residual error
+
+
+
 
 
 
