@@ -4,6 +4,9 @@ This document contain initial thoughts on how to structure the analysis pipeline
 
 ## Preprocessing - preproc.py
 All preprocesing should be done on different subsets:
+
+![Honeyval Figure](scripts/nlp/Honeyval_interaction_figure.png)
+
 - **Application Subsets:**
   - Overall (`--all_apps`)
   - By Application (`--app "wiki"`, `--app "forum"`, etc.)
