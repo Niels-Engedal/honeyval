@@ -69,7 +69,7 @@ $\beta_0$: baseline intercept
 $\beta_1$: fixed effect of target prompt
 $Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
 $u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{app(jk)}$: the nested random intercept for each run *k* within application *j*
+$u_{run(jk)}$: the nested random intercept for each run *k* within application *j*
 $\epsilon_{ijk}$: residual error
 
 **RQ2:**
@@ -81,7 +81,7 @@ $\beta_0$: baseline intercept
 $\beta_1$: fixed effect of target prompt
 $Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
 $u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{app(jk)}$: the nested random intercept for each run *k* within application *j*
+$u_{run(jk)}$: the nested random intercept for each run *k* within application *j*
 $\epsilon_{ijk}$: residual error
 
 

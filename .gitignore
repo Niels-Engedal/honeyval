@@ -4,6 +4,9 @@
 !.env.example
 !.env_EXAMPLE
 
+# MacOS specific
+*.DS_STORE
+
 # Generated experiment output can contain prompts, text, and credentials
 /results/
 /logs/
