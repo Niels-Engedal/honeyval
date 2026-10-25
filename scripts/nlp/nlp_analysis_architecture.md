@@ -23,6 +23,7 @@ All preprocesing should be done on different subsets:
 2. **Create embeddings (`embed.py`)**
    - Each strategy statement for each agent (`--statement_level`)
    - All responses in one interaction for one agent only (`--agent_level`)
+   - Exchange level (`--exchange_level`)
    - Complete interactions chronologically, cross-agent level (`--interaction_level`)
    - Then store embeddings for persistance, again caring for interpretability and ease of use for concepts vector projection.
 
