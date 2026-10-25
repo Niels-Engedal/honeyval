@@ -85,10 +85,20 @@ $u_{app(jk)}$: the nested random intercept for each run *k* within application *
 $\epsilon_{ijk}$: residual error
 
 
+**RQ3:**
+Repeated measures or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
 
+**RQ4:**
+Repeated measures or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
 
+**RQ5:**
+Generalized linear effect mixed effect models with different link functions depending on the variable:
+- Interaction length: poisson
+- Cost advantage: no idea
+- Detection TPR: binomial
+- Test Pass@1: binomial
 
-
+The above models still has to formulated explicitly. 
 
 
 
