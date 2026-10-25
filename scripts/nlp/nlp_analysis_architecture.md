@@ -86,10 +86,10 @@ $\epsilon_{ijk}$: residual error
 
 
 **RQ3:**
-Repeated measures or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
+Repeated measures correlation or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
 
 **RQ4:**
-Repeated measures or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
+Repeated measures correlation or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
 
 **RQ5:**
 Generalized linear effect mixed effect models with different link functions depending on the variable:
