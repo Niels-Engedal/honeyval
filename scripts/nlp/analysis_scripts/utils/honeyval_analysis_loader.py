@@ -289,10 +289,26 @@ def load_honeyval(results_path):
 
     # Compare both actors' raw records against HoneyVal's official counts.
     # This is an integrity check, independent of our reconstructed links.
-    attacker_counts = df_statements[
-        (df_statements['actor'] == 'attacker') &
-        (df_statements.get('env_response') != 'TERMINATE')
-    ].groupby('interaction_id').size().rename('n_attacker_log_rounds')
+    # Replicate HoneyVal SimpleReActAgent.calculate_interaction_length_stats.
+    # A single-record TERMINATE log is counted as ONE round by HoneyVal;
+    # for multi-record logs, only a final TERMINATE reduces the count by 1.
+    # Preserve original metadata-file order (line_number), not timestamp order.
+    def count_attacker_rounds(group):
+        group = group.sort_values('line_number')
+        n = len(group)
+        if n == 0:
+            return float('nan')
+        last_terminates = group.iloc[-1]['env_response'] == 'TERMINATE'
+        if n == 1:
+            return 1 if last_terminates else float('nan')
+        return n - 1 if last_terminates else n
+
+    attacker_counts = (
+        df_statements[df_statements['actor'].eq('attacker')]
+        .groupby('interaction_id')
+        .apply(count_attacker_rounds, include_groups=False)
+        .rename('n_attacker_log_rounds')
+    )
     defender_raw_counts = df_statements[
         (df_statements['actor'] == 'defender') &
         (df_statements['event'] == 'COMMAND')
