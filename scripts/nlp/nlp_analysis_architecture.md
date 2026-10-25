@@ -37,15 +37,19 @@ Concept vector projection can be done directly from the texts using turftopic, b
 ## Statistical modelling and tests - stats.py
 At the moment we intend investigate the following research questions:
 
-**RQ1:** Does a honeypot defender agent with a prompt intending to fake vulnerabilities increase the enticingness, relative to an agent with a prompt intending to mislead the attacker to believe it is not in a honeypot, as expressed by a concept vector projection, represented in the defender strategy and the attacker strategy. 
+**RQ1:** Does a honeypot defender agent with a prompt intending to fake vulnerabilities increase the attacker enticingness, relative to an agent with a prompt intending to mislead the attacker to believe it is not in a honeypot, as expressed by a concept vector projection, represented in the defender strategy and the attacker strategy. 
 
-**RQ2:** Does a honeypot defender agent with a prompt intending to mislead the attacker to believe it is not in a honeypot increase the believability, relative to an agent with a prompt intending to fake vulnerabilities, as expressed by a concept vector projection, represented in the defender strategy and the attacker strategy. 
+**RQ2:** Does a honeypot defender agent with a prompt intending to mislead the attacker to believe it is not in a honeypot increase the attacker believability, relative to an agent with a prompt intending to fake vulnerabilities, as expressed by a concept vector projection, represented in the defender strategy and the attacker strategy. 
 
-**RQ3:** Does the enticingness, as expressed by a concept vector projection, correlate between the attacker and defender agent strategies throughout the interaction.
+**RQ3:** Does a honeypot defender agent with a prompt intending to fake vulnerabilities increase the defender enticingness, relative to an agent with a prompt intending to mislead the attacker to believe it is not in a honeypot, as expressed by a concept vector projection, represented in the defender strategy and the attacker strategy. 
 
-**RQ4:** Does the believability, as expressed by a concept vector projection, correlate between the attacker and defender agent strategies throughout the interaction. 
+**RQ4:** Does a honeypot defender agent with a prompt intending to mislead the attacker to believe it is not in a honeypot increase the defender believability, relative to an agent with a prompt intending to fake vulnerabilities, as expressed by a concept vector projection, represented in the defender strategy and the attacker strategy. 
 
-**RQ5:** How does enticingness and believability correlate with interaction length, cost advantage, detection TPR and Test Pass@1. 
+**RQ5:** Does the enticingness, as expressed by a concept vector projection, correlate between the attacker and defender agent strategies throughout the interaction.
+
+**RQ6:** Does the believability, as expressed by a concept vector projection, correlate between the attacker and defender agent strategies throughout the interaction. 
+
+**RQ7:** How does enticingness and believability correlate with interaction length, cost advantage, detection TPR and Test Pass@1. 
 
 Currently we expect to analyse each of the questions on the following subsets and levels with the proposed statistical tests:
 | RQ | Subsets   | Levels                                   | Test                                                                                        |
@@ -62,36 +66,59 @@ How could each of the statistical models look:
 
 **RQ1:**
 
-$$EnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{app(jk)} + \epsilon_{ijk}$$ 
+$$AttackerEnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
 
-$EnticingnessCVP_{ijk}$: Enticingness concept vector projection score for statement *i* within run *k* and application *j*
+$AttackerEnticingnessCVP_{ijk}$: Attacker agent enticingness concept vector projection score for statement *i* within interaction *k* and application *j*
 $\beta_0$: baseline intercept
 $\beta_1$: fixed effect of target prompt
 $Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
 $u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{run(jk)}$: the nested random intercept for each run *k* within application *j*
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
 $\epsilon_{ijk}$: residual error
 
 **RQ2:**
 
-$$BelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{app(jk)} + \epsilon_{ijk}$$ 
+$$AttackerBelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
 
-$EnticingnessCVP_{ijk}$: Believability concept vector projection score for statement *i* within run *k* and application *j*
+$AttackerBelievabilityCVP_{ijk}$: Attacker agent believability concept vector projection score for statement *i* within interaction *k* and application *j*
 $\beta_0$: baseline intercept
 $\beta_1$: fixed effect of target prompt
 $Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
 $u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{run(jk)}$: the nested random intercept for each run *k* within application *j*
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
 $\epsilon_{ijk}$: residual error
 
-
 **RQ3:**
-Repeated measures correlation or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
+
+$$DefenderEnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
+
+$DefenderEnticingnessCVP_{ijk}$: Defender agent enticingness concept vector projection score for statement *i* within interaction *k* and application *j*
+$\beta_0$: baseline intercept
+$\beta_1$: fixed effect of target prompt
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
+$\epsilon_{ijk}$: residual error
 
 **RQ4:**
-Repeated measures correlation or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
+
+$$DefenderBelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
+
+$DefenderBelievabilityCVP_{ijk}$: Defender agent believability concept vector projection score for statement *i* within interaction *k* and application *j*
+$\beta_0$: baseline intercept
+$\beta_1$: fixed effect of target prompt
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
+$\epsilon_{ijk}$: residual error
 
 **RQ5:**
+Repeated measures correlation or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
+
+**RQ6:**
+Repeated measures correlation or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
+
+**RQ7:**
 Generalized linear effect mixed effect models with different link functions depending on the variable:
 - Interaction length: poisson
 - Cost advantage: no idea
