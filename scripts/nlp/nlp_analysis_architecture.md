@@ -15,17 +15,16 @@ All preprocesing should be done on different subsets:
       - Attacker (`--agent attacker`)
       - Defender (`--agent defender`)
 
-1. Parse agent interactions (parse_experiments_outputs.py)
-        - parse the following scores: interaction length, cost advantage, detection TPR and Test Pass@1.
-        - parse strategy texts statements into texts on each of the levels described below for the embeddings.
-        - store scores and texts intelligently for persistance, caring for interpretability and ease of use when embedding.
+1. **Parse agent interactions (`parse_experiments_outputs.py`)**
+   - Parse the following scores: interaction length, cost advantage, detection TPR, and Test Pass@1.
+   - Parse strategy text statements into texts on each of the levels described below for the embeddings.
+   - Store scores and texts intelligently for persistence, caring for interpretability and ease of use when embedding.
 
-2. Create embeddings(embed.py):
-        - each strategy statement for each agent (--statement_level)
-        - all responses in one interaction for one agent only (--agent_level)
-        - complete interactions chronologically, cross agent level (--interaction_level) 
-
-        Then store embeddings for persistance, again caring for interpretability and ease of use for concepts vector projection.
+2. **Create embeddings (`embed.py`)**
+   - Each strategy statement for each agent (`--statement_level`)
+   - All responses in one interaction for one agent only (`--agent_level`)
+   - Complete interactions chronologically, cross-agent level (`--interaction_level`)
+   - Then store embeddings for persistance, again caring for interpretability and ease of use for concepts vector projection.
 
 ## Concept Vector Projection - cvp.py
 Concept vector projection can be done directly from the texts using turftopic, but turftopic also allows us to use precomputed document embeddings, which we utilize to keep our pipeline modular and easy to experiment with without having to precompute embeddings again and again, when iterating on the concept vector projection script. However, again, be carefull about seed tuning. Choose the most rigouros seed before running concept vector projects and statistical tests. The concept vector projection implementation in turftopic does however require a mathching active encoder to when using the ConceptVectorProjection to encode the concept seeds, which we therefore do in this script along with the projection. The steps is therefore as follows:
@@ -66,51 +65,59 @@ How could each of the statistical models look:
 
 **RQ1:**
 
-$$AttackerEnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
+$$
+AttackerEnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}
+$$ 
 
-$AttackerEnticingnessCVP_{ijk}$: Attacker agent enticingness concept vector projection score for statement *i* within interaction *k* and application *j*
-$\beta_0$: baseline intercept
-$\beta_1$: fixed effect of target prompt
-$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
-$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
-$\epsilon_{ijk}$: residual error
+$AttackerEnticingnessCVP_{ijk}$: Attacker agent enticingness concept vector projection score for statement *i* within interaction *k* and application *j*\
+$\beta_0$: baseline intercept\
+$\beta_1$: fixed effect of target prompt\
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*\
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)\
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*\
+$\epsilon_{ijk}$: residual error\
 
 **RQ2:**
 
-$$AttackerBelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
+$$
+AttackerBelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}
+$$ 
 
-$AttackerBelievabilityCVP_{ijk}$: Attacker agent believability concept vector projection score for statement *i* within interaction *k* and application *j*
-$\beta_0$: baseline intercept
-$\beta_1$: fixed effect of target prompt
-$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
-$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
-$\epsilon_{ijk}$: residual error
+$AttackerBelievabilityCVP_{ijk}$: Attacker agent believability concept vector projection score for statement *i* within interaction *k* and application *j*\
+$\beta_0$: baseline intercept\
+$\beta_1$: fixed effect of target prompt\
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*\
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)\
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*\
+$\epsilon_{ijk}$: residual error\
 
 **RQ3:**
 
-$$DefenderEnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
+$$
+DefenderEnticingnessCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}
+$$ 
 
-$DefenderEnticingnessCVP_{ijk}$: Defender agent enticingness concept vector projection score for statement *i* within interaction *k* and application *j*
-$\beta_0$: baseline intercept
-$\beta_1$: fixed effect of target prompt
-$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
-$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
-$\epsilon_{ijk}$: residual error
+$DefenderEnticingnessCVP_{ijk}$: Defender agent enticingness concept vector projection score for statement *i* within interaction *k* and application *j*\
+$\beta_0$: baseline intercept\
+$\beta_1$: fixed effect of target prompt\
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*\
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)\
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*\
+$\epsilon_{ijk}$: residual error\
 
 **RQ4:**
 
-$$DefenderBelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}$$ 
+$$
+DefenderBelievabilityCVP_{ijk} = \beta_0 + \beta_1 \cdot Prompt_i + u_{app(j)} + u_{interaction(jk)} + \epsilon_{ijk}
+$$ 
 
-$DefenderBelievabilityCVP_{ijk}$: Defender agent believability concept vector projection score for statement *i* within interaction *k* and application *j*
-$\beta_0$: baseline intercept
-$\beta_1$: fixed effect of target prompt
-$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*
-$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)
-$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*
-$\epsilon_{ijk}$: residual error
+$DefenderBelievabilityCVP_{ijk}$: Defender agent believability concept vector projection score for statement *i* within interaction *k* and application *j*\
+$\beta_0$: baseline intercept\
+$\beta_1$: fixed effect of target prompt\
+$Prompt_i$: the prompt, either vulnerable or misleading, that generated statement *i*\
+$u_{app(j)}$: the random intercept for each application *j* (we could possibly add a random slope, but we think this will add uneccessary complexity)\
+$u_{interaction(jk)}$: the nested random intercept for each interaction *k* within application *j*\
+$\epsilon_{ijk}$: residual error\
 
 **RQ5:**
 Repeated measures correlation or linear mixed effect model. Collapse statement level attacker CVP scores to match the amount of defender statements - if we do repeated measure. The linear mixed effect model has not been conceptualized.
