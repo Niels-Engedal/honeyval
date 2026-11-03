@@ -1,0 +1,48 @@
+annotation_task_name: "Honeyval Strategy Annotation"
+task_dir: "."
+port: 8000
+
+data_files:
+  - data/demo.jsonl
+
+item_properties:
+  id_key: id
+  text_key: text
+
+output_annotation_dir: annotation_output/
+export_annotation_format: jsonl
+
+user_config:
+  allow_all_users: true
+  users: []
+
+require_password: false
+max_annotations_per_user: 10000
+max_annotations_per_item: 3
+
+annotation_schemes:
+  - annotation_type: likert
+    name: believability
+    description: "Believability: attacker = expressed confidence in authenticity; defender = intended authenticity."
+    min_label: "Very low"
+    max_label: "Very high"
+    size: 5
+
+  - annotation_type: likert
+    name: enticingness
+    description: "Enticingness: attacker = expressed interest; defender = intended attractiveness."
+    min_label: "Very low"
+    max_label: "Very high"
+    size: 5
+
+  - annotation_type: radio
+    name: seed_candidate
+    description: "Is this a good candidate for the CVP seed corpus?"
+    labels:
+      - "Yes"
+      - "No"
+      - "Unsure"
+
+  - annotation_type: text
+    name: notes
+    description: "Optional annotation notes"

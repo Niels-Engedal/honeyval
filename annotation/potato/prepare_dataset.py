@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare a named, isolated Potato task from Honeyval strategy records.
 
-Accepts a CSV/JSONL file, or an analysis directory containing decisions.csv.
+Accepts CSV/JSONL, or pandas Parquet/pickle output from 01_preproc.py.
 Uses only the Python standard library. Does not execute Honeyval agents.
 """
 
@@ -11,6 +11,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import random
 import re
 from collections import Counter
@@ -18,21 +19,36 @@ from pathlib import Path
 
 
 def find_input(path: Path) -> Path:
-    if path.is_file() and path.suffix.lower() in {".csv", ".jsonl"}:
+    if path.is_file() and path.suffix.lower() in {".csv", ".jsonl", ".parquet", ".pkl"}:
         return path
     if path.is_dir():
-        for filename in ("decisions.csv", "statements.csv", "strategies.jsonl"):
+        for filename in ("decisions.csv", "statements.csv", "statements_nlp.parquet",
+                         "statements_nlp.pkl", "statements.parquet", "statements.pkl",
+                         "strategies.jsonl"):
             candidate = path / filename
             if candidate.is_file():
                 return candidate
     raise SystemExit(
         "--input must point to a .csv/.jsonl file, or an analysis directory "
-        "with decisions.csv (or statements.csv/strategies.jsonl). "
+        "with decisions.csv, statements.csv, statements_nlp.parquet/.pkl, "
+        "or strategies.jsonl. "
         "For raw results/, run 01_prepare_data.py first."
     )
 
 
 def iter_records(path: Path):
+    if path.suffix.lower() in {".parquet", ".pkl"}:
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise SystemExit("Parquet/pickle input requires pandas in this Python environment.") from exc
+        if path.suffix.lower() == ".pkl":
+            # pandas.read_pickle is unsafe for untrusted input; only use local generated files.
+            frame = pd.read_pickle(path)
+        else:
+            frame = pd.read_parquet(path)
+        yield from frame.to_dict(orient="records")
+        return
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         if path.suffix.lower() == ".csv":
             yield from csv.DictReader(handle)
@@ -48,7 +64,7 @@ def iter_records(path: Path):
 def first(row: dict, *keys: str) -> str:
     for key in keys:
         value = row.get(key)
-        if value is not None and str(value).strip():
+        if value is not None and not (isinstance(value, float) and math.isnan(value)) and str(value).strip():
             return str(value).strip()
     return ""
 
@@ -66,7 +82,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, Counter]:
     records = []
     skipped = Counter()
     for idx, row in enumerate(iter_records(input_file), 1):
-        role = first(row, "role", "agent", "agent_role").lower()
+        role = first(row, "role", "actor", "agent", "agent_role").lower()
         if role not in {"attacker", "defender"}:
             skipped["unrecognized_role"] += 1
             continue
@@ -83,7 +99,8 @@ def prepare(args: argparse.Namespace) -> tuple[Path, Counter]:
             continue
         version = first(row, "strategy_prompt_version") or "unspecified"
         meta = {key: first(row, key) for key in (
-            "experiment", "trajectory_id", "config", "app", "sample",
+            "experiment", "trajectory_id", "interaction_id", "turn_id",
+            "exchange_id", "config", "app", "run", "sample",
             "step", "statement_order", "event", "strategy_source",
             "strategy_prompt_version",
         )}
@@ -193,7 +210,7 @@ annotation_schemes:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True,
-                        help="Prepared decisions.csv, strategies.jsonl or analysis folder")
+                        help="Prepared decisions.csv, statements_nlp.parquet/.pkl, JSONL or analysis folder")
     parser.add_argument("--name", required=True,
                         help="Unique dataset/run name (letters, digits, hyphen, underscore)")
     parser.add_argument("--output-root", type=Path,

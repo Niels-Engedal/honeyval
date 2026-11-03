@@ -384,6 +384,30 @@ python nlp_research_scripts/01_prepare_data.py \
   --output analysis_outputs/luna-mislead
 ```
 
+**Alternative: use the newer hierarchical NLP preprocessing pipeline from `nlp_analysis`.**
+This preserves statement/turn/exchange/interaction IDs and writes
+`statements_nlp.parquet` (or `.pkl` if a Parquet engine is unavailable):
+
+```bash
+python scripts/nlp/analysis_scripts/01_preproc.py \\
+  --results results/nlp-luna-all-comparison-v2-mislead \\
+  --output results/nlp_analysis
+
+python annotation/potato/prepare_dataset.py \\
+  --input results/nlp_analysis \\
+  --name luna-mislead-hierarchical \\
+  --role both
+
+potato start annotation/potato/datasets/luna-mislead-hierarchical/config.yaml
+```
+
+This format needs pandas (already used by `01_preproc.py`) and an
+appropriate Parquet engine for `.parquet`; only open `.pkl` files produced
+locally from trusted inputs. The compact `statements_nlp` output may omit
+prompt-version metadata, so **check the source experiments' protocol versions
+yourself** before pooling annotation sets. Use the original experiment-level
+metadata for provenance.
+
 **Step 2: Select the prepared dataset** by passing its analysis folder or
 `decisions.csv` directly to our adapter. `--name` is a **unique annotation
 project name**, not an experiment name that must match Honeyval's naming scheme.
@@ -405,9 +429,10 @@ evidence about a concept, **leave that rating unanswered**, rather than
 assigning a low score. Notes are optional. A flagged seed is a *candidate*,
 not an automatically validated positive/negative seed.
 
-The adapter accepts a prepared `.csv` or `.jsonl` file, or a directory
-containing `decisions.csv`, `statements.csv`, or `strategies.jsonl`.
-It expects a `role` (`attacker`/`defender`) and strategy text in `strategy`,
+The adapter accepts a prepared `.csv`, `.jsonl`, `.parquet`, or `.pkl` file,
+or a directory containing `decisions.csv`, `statements.csv`,
+`statements_nlp.parquet`/`.pkl`, or `strategies.jsonl`.
+It expects a `role` or `actor` (`attacker`/`defender`) and strategy text in `strategy`,
 `strategy_text`, `statement_text`, or `text`. Other available identifiers and
 metadata are preserved in the generated `data.jsonl`. Raw `results/` folders
 are **not** directly accepted: run the preprocessing step first.
