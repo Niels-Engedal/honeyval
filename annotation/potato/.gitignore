@@ -1,0 +1,7 @@
+# Generated data may contain sensitive Honeyval strategies and annotations.
+datasets/
+# Local demo files from the initial Potato setup.
+config.yaml
+data/
+annotation_output/
+__pycache__/
