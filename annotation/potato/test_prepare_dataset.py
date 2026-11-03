@@ -53,6 +53,31 @@ class PrepareDatasetTests(unittest.TestCase):
         data = (self.root / 'datasets' / 'legacy' / 'data.jsonl').read_text().splitlines()
         self.assertEqual(len(data), 2)
 
+    def test_preproc_pickle_actor_column(self):
+        try:
+            import pandas as pd
+        except ImportError:
+            self.skipTest("pandas not installed")
+        source = self.root / 'statements_nlp.pkl'
+        pd.DataFrame([
+            {'actor': 'attacker', 'statement_id': 's-1', 'strategy': 'A valid strategy',
+             'strategy_source': 'contemporaneous', 'interaction_id': 'int-1'},
+            {'actor': 'defender', 'statement_id': 's-2', 'strategy': 'Another valid strategy',
+             'strategy_source': 'contemporaneous', 'interaction_id': 'int-1'},
+        ]).to_pickle(source)
+        done = subprocess.run([
+            sys.executable, str(SCRIPT), '--input', str(source),
+            '--output-root', str(self.root / 'datasets'), '--name', 'from_preproc'
+        ], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        items = [
+            json.loads(x)
+            for x in (self.root / 'datasets' / 'from_preproc' / 'data.jsonl')
+            .read_text().splitlines()
+        ]
+        self.assertEqual({x['role'] for x in items}, {'attacker', 'defender'})
+        self.assertEqual({x['interaction_id'] for x in items}, {'int-1'})
+
     def test_mixed_protocol_rejected(self):
         with self.source.open('a') as fp:
             fp.write(json.dumps({'role': 'attacker', 'strategy':'new',
