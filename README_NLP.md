@@ -347,6 +347,139 @@ reference across independent trajectories. See
 for output interpretation and limitations. Similarity is NOT an automatic
 deception classifier.
 
+## Human strategy annotation with Potato (attacker and defender)
+
+Use the research-only Potato annotator for **human ratings of elicited strategy
+statements**, not for editing Honeyval or running models. This runs locally on
+Mac/Linux without Docker or API calls. The strategy texts are *elicited model
+self-reports*, not hidden chain-of-thought. **Attacker** ratings describe
+expressed perception (confidence in authenticity / interest in investigating),
+whereas **defender** ratings describe intended authenticity / attractiveness.
+Do not treat those two perspectives as the same measurement.
+
+### One-time installation
+
+From the repository root, activate your separate Potato virtual environment
+(or create one), then install the annotation package:
+
+```bash
+python3 -m venv potato-annotation-env
+source potato-annotation-env/bin/activate
+python -m pip install 'potato-annotation==2.13.1'
+```
+
+The existing `annotation/potato/config.yaml` demo, if you created one locally,
+can still be used. The workflow below **does not edit that file**. Each dataset
+generates its own Potato task, configuration, and output directory.
+
+### Choose the Honeyval dataset to annotate
+
+**Step 1: Prepare the chosen experiment** (skip if you already have an analysis
+folder containing `decisions.csv`). Replace the example experiment path with
+whichever `results/<experiment>` directory or ZIP you want to annotate:
+
+```bash
+python nlp_research_scripts/01_prepare_data.py \
+  --input results/nlp-luna-all-comparison-v2-mislead \
+  --output analysis_outputs/luna-mislead
+```
+
+**Step 2: Select the prepared dataset** by passing its analysis folder or
+`decisions.csv` directly to our adapter. `--name` is a **unique annotation
+project name**, not an experiment name that must match Honeyval's naming scheme.
+
+```bash
+python annotation/potato/prepare_dataset.py \
+  --input analysis_outputs/luna-mislead \
+  --name luna-mislead-v2 \
+  --role both
+
+potato validate annotation/potato/datasets/luna-mislead-v2/config.yaml
+potato start annotation/potato/datasets/luna-mislead-v2/config.yaml
+```
+
+Open `http://localhost:8000`, log in with a consistent annotator username,
+and rate believability, enticingness, and seed suitability. The configured
+Likert questions are role-specific. If a strategy does not provide enough
+evidence about a concept, **leave that rating unanswered**, rather than
+assigning a low score. Notes are optional. A flagged seed is a *candidate*,
+not an automatically validated positive/negative seed.
+
+The adapter accepts a prepared `.csv` or `.jsonl` file, or a directory
+containing `decisions.csv`, `statements.csv`, or `strategies.jsonl`.
+It expects a `role` (`attacker`/`defender`) and strategy text in `strategy`,
+`strategy_text`, `statement_text`, or `text`. Other available identifiers and
+metadata are preserved in the generated `data.jsonl`. Raw `results/` folders
+are **not** directly accepted: run the preprocessing step first.
+
+Optional selections:
+
+```bash
+# Small reproducible pilot, attacker only
+python annotation/potato/prepare_dataset.py \
+  --input analysis_outputs/luna-mislead/decisions.csv \
+  --name luna-mislead-attacker-pilot \
+  --role attacker --limit 60 --random-seed 42
+
+# Another experiment, defender only, with incoming-request context
+python annotation/potato/prepare_dataset.py \
+  --input analysis_outputs/luna-vulnerable \
+  --name luna-vulnerable-defender \
+  --role defender --include-context
+
+# Then launch the desired dataset by its own config path
+potato start annotation/potato/datasets/luna-vulnerable-defender/config.yaml
+```
+
+Defaults: both roles; only `strategy_source=contemporaneous` where that
+column exists; no fixed sample limit; no context; port 8000. Use
+`--source all` only for a documented legacy comparison, and never pool
+retrospective and contemporaneous strategies as though identical. Different
+`strategy_prompt_version` values are rejected by default; separate them
+into different input datasets or use `--allow-mixed-protocols` **only for an
+explicitly documented exploratory analysis**. Use `--help` for all options.
+
+Every annotation dataset is isolated under:
+
+```text
+annotation/potato/datasets/<name>/
+    config.yaml           # Launch this exact dataset
+    data.jsonl            # Fixed input statements, IDs, and metadata
+    manifest.json         # Source checksum, filtering, prompt version, counts
+    annotation_output/    # Per-annotator saved work and exports (created by Potato)
+```
+
+**Never reuse a dataset name to switch its underlying data.** The adapter
+refuses to overwrite an existing task, protecting annotations tied to stable
+item IDs. To change experiments, create a **new** `--name` and launch its
+`config.yaml`. Do not remove existing `annotation_output/` folders.
+These directories are Git-ignored because both model logs and human ratings
+may contain sensitive information.
+
+### Export annotations for analysis and future CVP seeds
+
+Potato saves per-user progress under `annotation_output/<user>/user_state.json`.
+For a consolidated export after annotation, run:
+
+```bash
+python -m potato.export \
+  --config annotation/potato/datasets/luna-mislead-v2/config.yaml \
+  --format csv \
+  --output annotation/potato/datasets/luna-mislead-v2/exports
+```
+
+For other formats, run `python -m potato.export --list-formats`. Exports are
+per-annotator observations. Join them to `data.jsonl` via item ID and preserve
+annotator identity, role, experiment, trajectory, statement and protocol
+metadata. **Do not automatically promote every `seed_candidate=Yes` to the
+concept vector**: check agreement, remove ambiguous statements, balance both
+concept poles and keep an independent held-out evaluation set. Split related
+statements by **scenario/trajectory**, not randomly by row, to avoid leakage.
+
+See the [Potato quick start](https://www.potatoannotator.com/docs/getting-started/quick-start)
+and [export guide](https://www.potatoannotator.com/docs/features/export-formats)
+for its interface, save behavior and supported output formats.
+
 ## NLP RESEARCH EXTENSION — contemporaneous strategies only
 
 **CUSTOM research extension, not upstream Honeyval.** Under the 23 October 2026
