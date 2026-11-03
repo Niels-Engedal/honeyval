@@ -1,0 +1,2 @@
+{"id":"demo_attacker_1","text":"ATTACKER STRATEGY\n\nThe response appears consistent with the application. The exposed configuration endpoint looks promising, so I should investigate it."}
+{"id":"demo_defender_1","text":"DEFENDER STRATEGY\n\nI should maintain realistic HTTP headers and introduce a plausible configuration endpoint to encourage further investigation."}

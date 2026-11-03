@@ -41,6 +41,7 @@ from src.utils.constants import (
 from src.utils.cost import compute_llm_cost, compute_llm_cost_from_events
 from src.utils.judge import Judge
 from src.utils.litellm_erb import litellm_completion_erb
+from src.utils.strategy_logging import add_strategy_instructions, collect_strategy, strategy_enabled
 from src.utils.logger import (
     Event,
     LogLevel,
@@ -263,12 +264,14 @@ class SimpleReactAgent(BaseAgent):
         return {}
 
     def _set_system_prompt(self) -> SimpleReactAgentSystemPrompt:
-        return SimpleReactAgentSystemPrompt(
-            system_prompt=SIMPLE_REACT_SYSTEM_PROMPT.format(
-                actions="\n".join(str(a) for a in self._actions),
-                tools="\n".join(str(t) for t in self.tools.values()),
-            )
+        system_prompt = SIMPLE_REACT_SYSTEM_PROMPT.format(
+            actions="\n".join(str(a) for a in self._actions),
+            tools="\n".join(str(t) for t in self.tools.values()),
         )
+        if strategy_enabled():
+            # NLP RESEARCH EXTENSION: embed strategy FIRST beside the ACTION schema.
+            system_prompt = add_strategy_instructions(system_prompt, role="attacker")
+        return SimpleReactAgentSystemPrompt(system_prompt=system_prompt)
 
     def _update_cost(
         self,
@@ -351,6 +354,13 @@ class SimpleReactAgent(BaseAgent):
         )
         self._messages.append({"role": "user", "content": prompt})
         model_response, usage = self._make_call(logger=logger)
+        strategy = None
+        strategy_audit = {}
+        if strategy_enabled():
+            # NLP RESEARCH EXTENSION: first generation only; no retries.
+            model_response, strategy, usage, strategy_audit = collect_strategy(
+                model_response, usage
+            )
         self._update_cost(
             usage["input_tokens"],
             usage["output_tokens"],
@@ -358,7 +368,7 @@ class SimpleReactAgent(BaseAgent):
             usage["cache_creation_tokens"],
         )
         logger.info(f"Running cost: ${self._total_cost:.2f}")
-        logger.debug(f"Raw model response received: {model_response.strip()}")
+        logger.debug(f"Action-parsing response (STRATEGY removed if present): {model_response.strip()}")
         action_observation = self._system_prompt.parse_action(model_response)
         action_observation = self._process_action(action_observation)
         self._messages.append({"role": "assistant", "content": model_response})
@@ -370,6 +380,8 @@ class SimpleReactAgent(BaseAgent):
                 "time_out": time_out,
                 "event": action_observation.executed_action_name,
                 "raw_response": model_response.strip(),
+                "strategy": strategy,
+                **strategy_audit,
                 "action_body": (
                     str(action_observation.action_body.tool_input)
                     if isinstance(action_observation.action_body, ToolCall)
@@ -398,6 +410,13 @@ class SimpleReactAgent(BaseAgent):
             }
         )
         model_response, usage = self._make_call(logger=logger)
+        strategy = None
+        strategy_audit = {}
+        if strategy_enabled():
+            # NLP RESEARCH EXTENSION: first generation only; no retries.
+            model_response, strategy, usage, strategy_audit = collect_strategy(
+                model_response, usage
+            )
         self._update_cost(
             usage["input_tokens"],
             usage["output_tokens"],
@@ -405,7 +424,7 @@ class SimpleReactAgent(BaseAgent):
             usage["cache_creation_tokens"],
         )
         logger.info(f"Running cost: ${self._total_cost:.2f}")
-        logger.debug(f"Raw model response received: {model_response.strip()}")
+        logger.debug(f"Action-parsing response (STRATEGY removed if present): {model_response.strip()}")
         action_observation = self._system_prompt.parse_action(model_response)
         action_observation = self._process_action(action_observation)
         self._messages.append({"role": "assistant", "content": model_response})
@@ -417,6 +436,8 @@ class SimpleReactAgent(BaseAgent):
                 "time_out": time_out,
                 "event": action_observation.executed_action_name,
                 "raw_response": model_response.strip(),
+                "strategy": strategy,
+                **strategy_audit,
                 "action_body": (
                     str(action_observation.action_body.tool_input)
                     if isinstance(action_observation.action_body, ToolCall)

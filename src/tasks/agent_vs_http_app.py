@@ -130,7 +130,7 @@ class AgentVsHttpApp(Subtask):
                     initial_instruction=specific_initial_instruction,
                 )
         except Exception as e:
-            self._subtask_logger.warning(f"An error occurred during execution:\n{e}")
+            self._subtask_logger.exception("An error occurred during execution")
             n_errors += 1
 
         self._subtask_logger.info(f"Task finished. Number of errors: {n_errors}")

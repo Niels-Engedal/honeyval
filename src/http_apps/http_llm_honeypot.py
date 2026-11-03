@@ -46,6 +46,7 @@ from src.utils.create_webapp import create_webapp
 from src.utils.docker_utils import build_image_if_needed
 from src.utils.judge import Judge
 from src.utils.litellm_erb import litellm_completion_erb
+from src.utils.strategy_logging import add_strategy_instructions, collect_strategy, strategy_enabled
 from src.utils.logger import (
     Event,
     LogLevel,
@@ -139,6 +140,17 @@ def run_backend_worker(
         cached_tokens = usage["cached_tokens"]
         cache_write_tokens = usage["cache_creation_tokens"]
         logger.debug(f"Raw model response:\n{model_response_raw}")
+        strategy = None
+        strategy_audit = {}
+        if strategy_enabled():
+            # NLP RESEARCH EXTENSION: first HTTP generation only, no retry.
+            model_response_raw, strategy, usage, strategy_audit = collect_strategy(
+                model_response_raw, usage
+            )
+            prompt_tokens = usage["input_tokens"]
+            completion_tokens = usage["output_tokens"]
+            cached_tokens = usage["cached_tokens"]
+            cache_write_tokens = usage["cache_creation_tokens"]
         parsed_response = _parse_response_static(model_response_raw)
         time_out = time()
         logger.info(f"Parsed model response:\n{parsed_response}")
@@ -157,6 +169,9 @@ def run_backend_worker(
                 "cache_write_tokens": cache_write_tokens,
                 "in": command.strip(),
                 "out": parsed_response.strip(),
+                "raw_response": model_response_raw,
+                "strategy": strategy,
+                **strategy_audit,
             }
         )
         if max_cost >= 0.0:
@@ -316,6 +331,9 @@ class HttpLLMHoneypot(BaseHttpApp):
         ):
             system_prompt += f"\n\n{benchmark_app.honeypot_additional_description}"
 
+        if strategy_enabled():
+            # NLP RESEARCH EXTENSION: strategy FIRST beside both RESPONSE schemas.
+            system_prompt = add_strategy_instructions(system_prompt, role="defender")
         self._history.append({"role": "system", "content": system_prompt})
         logger.info(
             f"Honeypot will launch.\nHoneypot type: Hosted Webapp -- {benchmark_app.name}\nSystem prompt:\n{system_prompt}"
@@ -432,7 +450,7 @@ class HttpLLMHoneypot(BaseHttpApp):
                     }
                 )
             else:
-                raise ValueError(f"No backend process found.")
+                logger.info("No backend process was started; nothing to clean up.")
 
         except Exception as e:
             logger.error(f"Failed to tear down the backend server: {e}")
@@ -532,7 +550,7 @@ class HttpLLMHoneypot(BaseHttpApp):
                 logger.info("The container has been removed successfully.")
                 self._container = None
             else:
-                raise ValueError("The container is None. Perhaps it failed to launch.")
+                logger.info("No frontend container was started; nothing to clean up.")
         except docker.errors.NotFound:
             logger.warning(
                 "The container was not found. It might have been removed already."
@@ -587,6 +605,24 @@ class HttpLLMHoneypot(BaseHttpApp):
                 metadata_logger=metadata_logger,
             )
 
+            # Register cleanup before starting either service. In particular, a
+            # failed frontend launch must not strand the backend child process.
+            # ExitStack runs callbacks in reverse order: front, back, reset.
+            stack.callback(self._reset_internal_state)
+            stack.callback(
+                self._tear_down_backend,
+                backend_port=backend_port,
+                logger=logger,
+                metadata_logger=metadata_logger,
+                connection_monitor=backend_connection_monitor,
+            )
+            stack.callback(
+                self._tear_down_front,
+                front_port=front_port,
+                logger=logger,
+                connection_monitor=front_connection_monitor,
+            )
+
             self._launch_backend(
                 backend_port=backend_port,
                 logger=logger,
@@ -600,22 +636,6 @@ class HttpLLMHoneypot(BaseHttpApp):
             self._launch_front(
                 benchmark_app=benchmark_app,
                 backend_port=backend_port,
-                front_port=front_port,
-                logger=logger,
-                connection_monitor=front_connection_monitor,
-            )
-
-            # prepare the teardown stack for exit
-            stack.callback(self._reset_internal_state)
-            stack.callback(
-                self._tear_down_backend,
-                backend_port=backend_port,
-                logger=logger,
-                metadata_logger=metadata_logger,
-                connection_monitor=backend_connection_monitor,
-            )
-            stack.callback(
-                self._tear_down_front,
                 front_port=front_port,
                 logger=logger,
                 connection_monitor=front_connection_monitor,
