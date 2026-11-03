@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 !.env_EXAMPLE
+potato-annotation-env
+# MacOS specific
+*.DS_STORE
 
 # Generated experiment output can contain prompts, text, and credentials
 /results/
