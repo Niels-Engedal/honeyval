@@ -40,6 +40,7 @@ SECRET_MAPPING = {
     "anthropic": ["anthropic", "claude"],
     "qwen": ["qwen", "alibaba"],
     "zai-org": ["zai", "z ai", "z-ai", "glm", "glm-5"],
+    "deepseek": ["deepseek"],
 }
 
 # these costs are a lower-bound, as some providers have increased prices
@@ -65,6 +66,17 @@ TOKEN_COSTS_AND_CONTEXT = {
         "input": 0.1,
         "output": 0.5,
         "cached": 0.01,
+        "max_in_context": 1050000,
+        "max_out_context": 128000,
+    },
+    # NLP RESEARCH EXTENSION: DeepSeek V4.1 Flash via NEAR AI Cloud
+    # (https://near.ai/models/deepseek/deepseek-v4.1-flash, checked 2026-11-17).
+    # NEAR does not publish a max output size; max_out_context is an assumption
+    # used only for context-utilisation metrics.
+    "nearai/deepseek/deepseek-v4.1-flash": {
+        "input": 0.3,
+        "output": 1.2,
+        "cached": 0.006,
         "max_in_context": 1050000,
         "max_out_context": 128000,
     },

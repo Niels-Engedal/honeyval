@@ -188,6 +188,17 @@ def litellm_completion_erb(
                     raise ValueError(
                         "Missing together.ai api key environment variable: TOGETHERAI_API_KEY"
                     )
+            elif model.startswith("nearai/"):
+                # NLP RESEARCH EXTENSION: NEAR AI Cloud is OpenAI-compatible; strip
+                # our routing prefix and send the NEAR model ID to its endpoint.
+                nearai_api_key = os.environ.get("NEARAI_API_KEY")
+                if not nearai_api_key:
+                    raise ValueError(
+                        "Missing NEAR AI api key environment variable: NEARAI_API_KEY"
+                    )
+                litellm_kwargs["base_url"] = "https://cloud-api.near.ai/v1"
+                litellm_kwargs["api_key"] = nearai_api_key
+                model_ = "openai/" + model.removeprefix("nearai/")
             else:
                 litellm_kwargs["base_url"] = os.environ.get("BIFROST_URL")
                 litellm_kwargs["api_key"] = os.environ.get("BIFROST_KEY")

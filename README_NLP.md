@@ -248,6 +248,13 @@ LiteLLM installation and API model access; validate one trajectory before
 launching a batch. The framework uses Chat Completions with manually
 parsed XML tool actions (not OpenAI's native function-calling interface).
 
+**DeepSeek via NEAR AI:** Use `nearai/deepseek/deepseek-v4.1-flash-python-curl`
+as the attacker model. The `nearai/` prefix routes the request to NEAR AI
+Cloud's OpenAI-compatible endpoint; add `NEARAI_API_KEY` to the private
+credential file. LiteLLM does not forward `reasoning_effort` for this model,
+so `--pentest_reasoning_effort` has no effect on it. NEAR serves this model
+through OpenRouter, not on its TEE hardware.
+
 **Costs:** The manual defaults limit each attacker trajectory to $5 and each
 defender trajectory to $2, not the total experiment. Pricing uses standard
 API rates as of October 2026 and is approximate; multiple apps and samples
