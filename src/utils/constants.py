@@ -41,6 +41,7 @@ SECRET_MAPPING = {
     "qwen": ["qwen", "alibaba"],
     "zai-org": ["zai", "z ai", "z-ai", "glm", "glm-5"],
     "deepseek": ["deepseek"],
+    "deepseek-ai": ["deepseek"],
 }
 
 # these costs are a lower-bound, as some providers have increased prices
@@ -74,6 +75,16 @@ TOKEN_COSTS_AND_CONTEXT = {
     # NEAR does not publish a max output size; max_out_context is an assumption
     # used only for context-utilisation metrics.
     "nearai/deepseek/deepseek-v4.1-flash": {
+        "input": 0.3,
+        "output": 1.2,
+        "cached": 0.006,
+        "max_in_context": 1050000,
+        "max_out_context": 128000,
+    },
+    # Abliterated (refusal-direction removed) 2026-10-17 snapshot, served from
+    # NEAR's TEE infrastructure; same list prices
+    # (https://near.ai/models/deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated).
+    "nearai/deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated": {
         "input": 0.3,
         "output": 1.2,
         "cached": 0.006,

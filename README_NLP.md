@@ -255,6 +255,12 @@ credential file. LiteLLM does not forward `reasoning_effort` for this model,
 so `--pentest_reasoning_effort` has no effect on it. NEAR serves this model
 through OpenRouter, not on its TEE hardware.
 
+For the abliterated variant (refusal behaviour removed, October 17 snapshot,
+served from NEAR's TEE infrastructure) use
+`nearai/deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated-python-curl`.
+It is a different model from the one above, so keep it in its own
+experiment name rather than mixing the two in one dataset.
+
 **Costs:** The manual defaults limit each attacker trajectory to $5 and each
 defender trajectory to $2, not the total experiment. Pricing uses standard
 API rates as of October 2026 and is approximate; multiple apps and samples
@@ -343,6 +349,9 @@ actions. For exploratory RQ1 Sentence-BERT similarities, first install
 
 ```bash
 python -m pip install sentence-transformers
+# turftopic (concept vector projection) is also analysis-only and kept out of
+# env.yaml: it requires rich<14 and pulls in torch. Install it where you analyse:
+#   python -m pip install 'turftopic==0.28.0' 'rich==13.9.4'
 python nlp_research_scripts/03_embed_strategies.py \
   --input analysis_outputs/luna-pilot-v2
 ```
