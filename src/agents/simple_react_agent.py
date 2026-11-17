@@ -88,6 +88,9 @@ class ActionObservation:
     executed_action_name: str
     action_body: ToolCall | str | None = None
     environment_response: str = ""
+    # NLP RESEARCH EXTENSION: True when a missing final </ACTION> was added
+    # before parsing (see SimpleReactAgentSystemPrompt.parse_action).
+    action_close_repaired: bool = False
 
     def __str__(self) -> str:
         if self.action_body is not None:
@@ -113,6 +116,23 @@ class SimpleReactAgentSystemPrompt:
     )
 
     def parse_action(self, model_response: str) -> ActionObservation:
+        # NLP RESEARCH EXTENSION: some models (e.g. abliterated DeepSeek V4.1
+        # Flash via NEAR AI) end an otherwise complete action right after
+        # </ACTION_BODY> and omit the final </ACTION>. Close the tag only in
+        # that exact case; responses that already close it parse as before.
+        stripped = model_response.rstrip()
+        repaired = (
+            "<ACTION>" in model_response
+            and "</ACTION>" not in model_response
+            and stripped.endswith("</ACTION_BODY>")
+        )
+        action_observation = self._parse_closed_action(
+            stripped + "\n</ACTION>" if repaired else model_response
+        )
+        action_observation.action_close_repaired = repaired
+        return action_observation
+
+    def _parse_closed_action(self, model_response: str) -> ActionObservation:
         actions = re.findall(self.regex_patterns["action"], model_response, re.DOTALL)
         if actions:
             action = actions[-1].strip()
@@ -370,6 +390,9 @@ class SimpleReactAgent(BaseAgent):
         logger.info(f"Running cost: ${self._total_cost:.2f}")
         logger.debug(f"Action-parsing response (STRATEGY removed if present): {model_response.strip()}")
         action_observation = self._system_prompt.parse_action(model_response)
+        action_close_repaired = action_observation.action_close_repaired
+        if action_close_repaired:
+            logger.info("Added missing final </ACTION> tag before parsing.")
         action_observation = self._process_action(action_observation)
         self._messages.append({"role": "assistant", "content": model_response})
 
@@ -388,6 +411,7 @@ class SimpleReactAgent(BaseAgent):
                     else str(action_observation.action_body)
                 ),
                 "env_response": action_observation.environment_response,
+                "action_close_repaired": action_close_repaired,
                 "tokens_consumed": usage["input_tokens"],
                 "tokens_generated": usage["output_tokens"],
                 "cached_tokens": usage["cached_tokens"],
@@ -426,6 +450,9 @@ class SimpleReactAgent(BaseAgent):
         logger.info(f"Running cost: ${self._total_cost:.2f}")
         logger.debug(f"Action-parsing response (STRATEGY removed if present): {model_response.strip()}")
         action_observation = self._system_prompt.parse_action(model_response)
+        action_close_repaired = action_observation.action_close_repaired
+        if action_close_repaired:
+            logger.info("Added missing final </ACTION> tag before parsing.")
         action_observation = self._process_action(action_observation)
         self._messages.append({"role": "assistant", "content": model_response})
 
@@ -444,6 +471,7 @@ class SimpleReactAgent(BaseAgent):
                     else str(action_observation.action_body)
                 ),
                 "env_response": action_observation.environment_response,
+                "action_close_repaired": action_close_repaired,
                 "tokens_consumed": usage["input_tokens"],
                 "tokens_generated": usage["output_tokens"],
                 "cached_tokens": usage["cached_tokens"],

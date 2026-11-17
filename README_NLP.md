@@ -261,6 +261,17 @@ served from NEAR's TEE infrastructure) use
 It is a different model from the one above, so keep it in its own
 experiment name rather than mixing the two in one dataset.
 
+**Action-tag repair:** the abliterated DeepSeek model often ends a complete
+action right after `</ACTION_BODY>` without the final `</ACTION>`. The
+upstream parser counted these as `PARSING ERROR` (128 of 169 attacker steps
+in the first test). The fork now adds the missing tag in exactly that case and
+leaves every other response untouched. Each repaired step is logged in
+`agent.log` and marked `"action_close_repaired": true` in
+`agent-metadata.jsonl`; `raw_response` keeps the model's original output.
+Report the repair rate per model alongside the results. Runs before this
+change (e.g. `nlp-deepseek-vs-luna-20261117-0944` and `-big`) were parsed
+strictly.
+
 **Costs:** The manual defaults limit each attacker trajectory to $5 and each
 defender trajectory to $2, not the total experiment. Pricing uses standard
 API rates as of October 2026 and is approximate; multiple apps and samples
