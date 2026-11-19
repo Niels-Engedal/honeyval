@@ -85,8 +85,11 @@ run_command() {
 }
 
 summarize() {
-  local experiment="$1"
-  if [[ "${HONEYVAL_DRY_RUN:-0}" == "1" ]]; then return; fi
+  local experiment="$1" max_steps="${2:-}"
+  if [[ "${HONEYVAL_DRY_RUN:-0}" == "1" ]]; then
+    echo "DRY RUN: would preprocess results/$experiment into results/nlp_analysis/$experiment"
+    return
+  fi
   echo
   echo "Task summaries:"
   grep -R 'Task finished. Number of errors:' "results/$experiment" --include='task.log' || true
@@ -96,6 +99,25 @@ summarize() {
   fi
   echo "Sandbox firewall warnings:"
   grep -R 'iptables insert failed' "results/$experiment" --include='*.log' || true
+  preprocess "$experiment" "$max_steps"
+}
+
+preprocess() {
+  # Build the analysis tables and metrics as soon as the batch ends. A failure
+  # here never affects the collected data; rerun the printed command by hand.
+  local experiment="$1" max_steps="${2:-}" py=python
+  if [[ -x /home/ucloud/miniconda3/envs/honeyval/bin/python ]]; then
+    py=/home/ucloud/miniconda3/envs/honeyval/bin/python
+  fi
+  local -a cmd=("$py" scripts/nlp/analysis_scripts/01_preproc.py
+                --results "results/$experiment" --output "results/nlp_analysis/$experiment")
+  if [[ -n "$max_steps" ]]; then cmd+=(--max-steps "$max_steps"); fi
+  [[ -d "results/$experiment" ]] || return 0
+  echo
+  echo "Preprocessing:"
+  printf ' %q' "${cmd[@]}"
+  printf '\n'
+  "${cmd[@]}" || echo "WARNING: preprocessing failed; the results are untouched. Fix and rerun the command above." >&2
 }
 
 MODE="${1:-}"
@@ -129,7 +151,7 @@ case "$MODE" in
     ask APPS_TEXT "Benchmark apps (space separated, or 'all')" "Calculator CreditCardService Login Recipes"
     ask ATTACKER "Attacker model" "nearai/deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated-python-curl"
     ask DEFENDER "Defender model" "openai/gpt-6-luna"
-    ask PENTEST_PROMPT "Attacker prompt (exploit/exploit-detect/exploit-detect-hide)" "exploit"
+    ask PENTEST_PROMPT "Attacker prompt (exploit/exploit-detect/exploit-detect-hide)" "exploit-detect"
     ask HONEYPOT_PROMPTS_TEXT "Defender instructions (one or more, e.g. 'mislead vulnerable')" "vulnerable"
     ask SAMPLES "Samples per app" "1"
     ask STEPS "Maximum attacker steps" "50"
@@ -241,7 +263,7 @@ case "$MODE" in
         --pentest_cost_limit "$ATTACKER_LIMIT" \
         --honeypot_cost_limit "$DEFENDER_LIMIT"
     done
-    summarize "$NAME"
+    summarize "$NAME" "$STEPS"
     exit 0
     ;;
   1|smoke)
@@ -285,4 +307,4 @@ run_command \
   --pentest_cost_limit 1 \
   --honeypot_cost_limit 1 \
   "$@"
-summarize "$NAME"
+summarize "$NAME" "$STEPS"

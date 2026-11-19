@@ -27,8 +27,10 @@ def test_attacker_prompt_strategy_before_action_in_both_examples():
     original = SIMPLE_REACT_SYSTEM_PROMPT.format(actions="TOOL", tools="curl")
     updated = add_strategy_instructions(original, role="attacker")
     assert original.count("<STRATEGY>") == 0
-    assert updated.count("<STRATEGY>") == 2
-    assert updated.count("<ACTION>") == original.count("<ACTION>")
+    # Two format examples plus one mention in the instruction text.
+    assert updated.count("<STRATEGY>") == 3
+    # The instruction text itself names <ACTION> once; no format example is added.
+    assert updated.count("<ACTION>") == original.count("<ACTION>") + 1
     assert updated.index("<STRATEGY>") < updated.index("<ACTION>")
     assert "chosen NEXT action" in updated
     assert "3-5 concrete sentences" in updated
@@ -41,8 +43,10 @@ def test_defender_prompt_strategy_before_response_in_both_examples():
         openapi_scheme="test-spec", additional_instructions="mislead test"
     )
     updated = add_strategy_instructions(original, role="defender")
-    assert updated.count("<STRATEGY>") == 2
-    assert updated.count("<RESPONSE>") == original.count("<RESPONSE>")
+    # Two format examples plus one mention in the instruction text.
+    assert updated.count("<STRATEGY>") == 3
+    # The instruction text itself names <RESPONSE> once; no format example is added.
+    assert updated.count("<RESPONSE>") == original.count("<RESPONSE>") + 1
     assert updated.index("<STRATEGY>") < updated.index("<RESPONSE>")
     assert "mislead test" in updated
     assert "ADDITIONAL INSTRUCTIONS" in updated

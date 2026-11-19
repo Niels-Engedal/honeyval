@@ -28,7 +28,8 @@ def load_parser(script_dir: Path):
     """Import the adjacent utils parser regardless of the launch directory."""
     sys.path.insert(0, str(script_dir))
     from utils.honeyval_analysis_loader import load_honeyval
-    return load_honeyval
+    from utils.interaction_metrics import add_interaction_metrics, summarise_interactions
+    return load_honeyval, add_interaction_metrics, summarise_interactions
 
 
 def prepare_for_parquet(frame: pd.DataFrame) -> pd.DataFrame:
@@ -170,6 +171,28 @@ def save_termination_report(interactions, output_dir):
     )
 
 
+def report_metric_warnings(interactions):
+    """Print problems that would contaminate or bias the metrics."""
+    checks = [
+        ("defender LLM calls failed after all retries (attacker got HTTP 500)",
+         "n_defender_failed_llm_calls"),
+        ("requests hit the defender cost limit (attacker got HTTP 403)", "n_defender_cost_limited"),
+        ("trajectories logged task errors", "n_task_errors"),
+    ]
+    for label, col in checks:
+        total = pd.to_numeric(interactions[col], errors="coerce").fillna(0)
+        if total.sum():
+            print(f"WARNING: {int(total.sum())} {label} in {int((total > 0).sum())} interactions")
+    differs = interactions["honeypot_detected_any"] & ~interactions["honeypot_detected_upstream"]
+    if differs.any():
+        print(f"NOTE: {int(differs.sum())} interactions contain <HONEYPOT-DETECTED> that "
+              "Honeyval's own metric misses (marker in a TOOL step or in the STRATEGY text)")
+    low = interactions["attacker_strategy_coverage_after_step5"] < 0.8
+    if low.any():
+        print(f"WARNING: attacker strategy coverage after step 5 is below 80% in "
+              f"{int(low.sum())} interactions")
+
+
 def validate(statements, turns, exchanges, interactions):
     """Fail before saving if key relationships or official counts are inconsistent."""
     for name, df, key in (
@@ -216,7 +239,8 @@ def validate(statements, turns, exchanges, interactions):
         if (interactions[status_col] == "mismatch").any():
             problem = interactions.loc[
                 interactions[status_col].eq('mismatch'),
-                ['app', 'run', f'{actor}_rounds', f'n_{actor}_log_rounds']
+                ['app', 'run', f'{actor}_rounds',
+                 'n_attacker_log_rounds' if actor == 'attacker' else 'n_defender_requests']
             ]
             raise ValueError(
                 f"HoneyVal {actor} official-round mismatch:\n"
@@ -296,12 +320,35 @@ def add_aggregated_strategies(statements, turns, exchanges, interactions):
 # Analysis schema: one row per original entity, with large repeated aggregates
 # and parser/debugging fields excluded. Full records remain in archive/.
 # -----------------------------------------------------------------------------
+# Columns added by utils/interaction_metrics.py (see its docstring).
+METRIC_COLUMNS = [
+    "attacker_effort", "defender_effort", "trajectory_finished",
+    "n_attacker_steps", "final_attacker_event", "end_reason",
+    "n_curl_steps", "n_python_steps", "n_parsing_errors", "n_action_close_repaired",
+    "honeypot_detected_upstream", "honeypot_detected_any", "first_detection_step",
+    "n_defender_requests", "n_defender_llm_calls", "n_defender_rate_limited",
+    "n_defender_cost_limited", "n_defender_failed_llm_calls", "n_defender_llm_retries",
+    "n_attacker_llm_retries", "n_task_errors",
+    "defender_calls_per_step_mean", "defender_calls_per_step_median",
+    "defender_calls_per_python_step", "defender_calls_per_curl_step",
+    "share_defender_calls_from_python",
+    "attacker_strategy_coverage", "attacker_strategy_coverage_after_step5",
+    "defender_strategy_coverage", "strategy_prompt_version",
+    "attacker_input_tokens", "attacker_cached_tokens", "attacker_output_tokens",
+    "attacker_max_input_tokens", "defender_input_tokens", "defender_cached_tokens",
+    "defender_output_tokens", "defender_max_input_tokens",
+    "attacker_cost_usd_from_logs", "defender_cost_usd_from_logs",
+    "combined_cost_usd_from_logs", "cost_advantage", "duration_seconds",
+]
+
 ANALYSIS_COLUMNS = {
     "statements": [
         "statement_id", "interaction_id", "turn_id", "exchange_id",
         "actor", "statement_order", "event", "strategy", "has_strategy_text",
         "strategy_valid", "strategy_source", "action_body", "env_response",
         "tokens_consumed", "tokens_generated", "time_in", "time_out",
+        "tool_name", "n_defender_calls_triggered", "honeypot_marker",
+        "action_close_repaired", "strategy_prompt_version",
     ],
     "turns": [
         "turn_id", "interaction_id", "exchange_id", "actor", "turn_order",
@@ -322,6 +369,7 @@ ANALYSIS_COLUMNS = {
         "defender_total_tokens", "attacker_cost_usd", "defender_cost_usd",
         "immediate_giveup", "defender_exposed", "safety_refusal_candidate",
         "refusal_review_status",
+        *METRIC_COLUMNS,
         "strategy", "attacker_strategy", "defender_strategy",
     ],
 }
@@ -402,15 +450,24 @@ def main():
                         default=project_root / "results" / "nlp_analysis")
     parser.add_argument("--no-archive", action="store_true",
                         help="Skip full validated parser tables in output/archive/")
+    parser.add_argument("--include-unfinished", action="store_true",
+                        help="Keep trajectories without 'Task finished' in task.log "
+                             "(e.g. a copy taken while a run was going)")
+    parser.add_argument("--max-steps", type=int, default=None,
+                        help="The run's --pentest_max_steps; lets end_reason tell "
+                             "step-cap endings apart from other non-terminal endings")
     args = parser.parse_args()
 
     if not args.results.is_dir():
         raise FileNotFoundError(f"Input results directory not found: {args.results}")
 
-    load_honeyval = load_parser(script_dir)
-    df_statements, df_turns, df_exchanges, df_interactions = load_honeyval(args.results)
+    load_honeyval, add_interaction_metrics, summarise_interactions = load_parser(script_dir)
+    df_statements, df_turns, df_exchanges, df_interactions = load_honeyval(
+        args.results, include_unfinished=args.include_unfinished)
 
     df_statements, df_interactions = add_termination_audit(df_statements, df_interactions)
+    df_statements, df_interactions = add_interaction_metrics(
+        df_statements, df_interactions, args.results, max_steps=args.max_steps)
 
     # Keep technical START/END and termination records in raw statements for
     # provenance. has_strategy_text identifies the NLP-ready subset.
@@ -424,7 +481,7 @@ def main():
         "interaction_id", "config", "app", "run",
         "attacker_rounds", "n_attacker_log_rounds",
         "attacker_rounds_validation_status",
-        "defender_rounds", "n_defender_log_rounds",
+        "defender_rounds", "n_defender_requests", "n_defender_log_rounds",
         "defender_rounds_validation_status", "n_linked_defender_calls",
     ]
     diagnostics = df_interactions[[c for c in diagnostic_cols if c in df_interactions]].copy()
@@ -434,6 +491,17 @@ def main():
     diagnostic_path = args.output / "round_count_diagnostics.csv"
     diagnostics.to_csv(diagnostic_path, index=False)
     print(f"Saved validation report → {diagnostic_path}")
+
+    metric_cols = ["interaction_id", "config", "app", "run",
+                   "attacker_model", "attacker_prompt_strategy",
+                   "defender_model", "defender_prompt_strategy", *METRIC_COLUMNS]
+    df_interactions[[c for c in metric_cols if c in df_interactions]].to_csv(
+        args.output / "interaction_metrics.csv", index=False)
+    summary = summarise_interactions(df_interactions)
+    summary.to_csv(args.output / "interaction_metrics_summary.csv", index=False)
+    print(f"Saved metrics → {args.output / 'interaction_metrics.csv'} and "
+          f"interaction_metrics_summary.csv")
+    report_metric_warnings(df_interactions)
 
     df_turns, df_exchanges, df_interactions = add_aggregated_strategies(
         df_statements, df_turns, df_exchanges, df_interactions

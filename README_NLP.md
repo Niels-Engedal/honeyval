@@ -116,6 +116,27 @@ find results/<experiment> -name agent-metadata.jsonl -exec wc -l {} +
 
 Record the Git commit hash with every dataset. Logs may contain sensitive content; never commit them.
 
+**Metrics.** When a batch finishes, the launcher runs preprocessing on its own and writes the analysis tables and metrics to `results/nlp_analysis/<experiment>/`. If that step fails, it prints a warning and the command to rerun by hand; the collected data is never touched. It won't run if you stop the batch with Ctrl-C. To run it yourself:
+
+```bash
+python scripts/nlp/analysis_scripts/01_preproc.py \
+  --results results/<experiment> --output results/nlp_analysis/<experiment> --max-steps 50
+```
+
+Unfinished trajectories are skipped unless you pass `--include-unfinished`. Besides the analysis tables, it writes `interaction_metrics.csv` (one row per trajectory) and `interaction_metrics_summary.csv` (one row per condition). The main columns:
+
+| Metric | Meaning |
+| --- | --- |
+| `n_defender_requests` | Interaction length as in the paper: HTTP requests the honeypot received, rate-limited ones included |
+| `end_reason` | `success`, `giveup`, `step_cap` (needs `--max-steps`) or `no_terminal_action` |
+| `honeypot_detected_upstream` / `_any` | Honeyval's detection check (non-tool steps, STRATEGY stripped) and a strict one that checks every attacker output in full |
+| `cost_advantage_ratio_of_totals` | Attacker cost ÷ defender cost per condition, as in the paper. Costs are recomputed from the token logs. |
+| `share_defender_calls_from_python` | How much of the defender load comes from attacker scripts |
+| `attacker_strategy_coverage_after_step5` | Catches strategies dying out later in a trajectory |
+| `n_defender_failed_llm_calls`, `n_defender_cost_limited`, `n_defender_rate_limited` | Requests that didn't get a normal defender answer. Failed calls only appear in `http-app.log`, so Honeyval's own interaction length leaves them out. |
+
+The script prints a warning when failed calls, cost-limit hits, task errors or low strategy coverage would contaminate the data.
+
 ## 4. What we changed compared to upstream
 
 Our code changes are marked `NLP RESEARCH EXTENSION`.

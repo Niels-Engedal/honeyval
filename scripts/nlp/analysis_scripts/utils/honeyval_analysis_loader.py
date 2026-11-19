@@ -3,23 +3,31 @@ import json
 import re
 import pandas as pd
 
-KNOWN_ATTACKER_STRATEGIES = ('exploit',)  # Add new names here if used
+# Result folders are named by src/main.py as
+#   <attacker>-<effort>-<prompt>-<defender>-<effort>-<instructions>
+# with '/' in model IDs replaced by '-' and effort abbreviated (low->l,
+# medium->m, high->h; other efforts are kept verbatim). Rule-based honeypots
+# have no defender effort.
+_EFFORTS = r'l|m|h|none|minimal|max|xhigh'
+_PROMPTS = r'exploit-detect-hide|exploit-detect|exploit'
+_INSTRUCTIONS = r'none|mislead|convince|vulnerable|careful_pi|aggressive_pi'
+_CONFIG_RE = re.compile(
+    rf'^(?P<attacker_model>.+?)-(?P<attacker_effort>{_EFFORTS})-'
+    rf'(?P<attacker_prompt_strategy>{_PROMPTS})-'
+    rf'(?P<defender_model>.+?)(?:-(?P<defender_effort>{_EFFORTS}))?-'
+    rf'(?P<defender_prompt_strategy>{_INSTRUCTIONS})$'
+)
+_EFFORT_NAMES = {'l': 'low', 'm': 'medium', 'h': 'high'}
 
 
 def parse_config(config):
-    for strategy in sorted(KNOWN_ATTACKER_STRATEGIES, key=len, reverse=True):
-        marker = f'-m-{strategy}-'
-        if marker in config:
-            attacker_model, right = config.split(marker, 1)
-            if '-m-' not in right:
-                break
-            defender_model, defender_strategy = right.rsplit('-m-', 1)
-            if attacker_model and defender_model and defender_strategy:
-                return dict(attacker_model=attacker_model,
-                            attacker_prompt_strategy=strategy,
-                            defender_model=defender_model,
-                            defender_prompt_strategy=defender_strategy)
-    raise ValueError(f'Unexpected configuration name: {config}')
+    match = _CONFIG_RE.match(config)
+    if not match:
+        raise ValueError(f'Unexpected configuration name: {config}')
+    factors = match.groupdict()
+    for key in ('attacker_effort', 'defender_effort'):
+        factors[key] = _EFFORT_NAMES.get(factors[key], factors[key])
+    return factors
 
 
 def read_jsonl(path):
@@ -38,13 +46,27 @@ def read_json(path):
     return {}
 
 
-def load_honeyval(results_path):
+def trajectory_finished(task_dir):
+    """Honeyval writes 'Task finished' to task.log when a trajectory ends."""
+    log = Path(task_dir) / 'task.log'
+    return log.exists() and 'Task finished' in log.read_text(encoding='utf-8', errors='replace')
+
+
+def load_honeyval(results_path, include_unfinished=False):
+    """Load all trajectories under results_path.
+
+    Unfinished trajectories (still running or interrupted) are skipped unless
+    include_unfinished=True. Then defender calls logged after the attacker's
+    last record belong to a step that never finished and are dropped.
+    """
     results_path = Path(results_path)
     if not results_path.is_dir():
         raise FileNotFoundError(results_path)
 
     statements = []
     interaction_rows = []
+    skipped_unfinished = []
+    dropped_pending = 0
     source_paths = sorted(results_path.rglob('agent-metadata.jsonl'))
     source_paths = [p for p in source_paths if p.parent.name == 'metadata-logs']
     if not source_paths:
@@ -63,6 +85,11 @@ def load_honeyval(results_path):
         config = run_dir.parent.parent.name
         factors = parse_config(config)
         interaction_id = f'{config}|{app}|{run}'
+        finished = trajectory_finished(task_dir)
+        if not finished and not include_unfinished:
+            skipped_unfinished.append(interaction_id)
+            continue
+        last_attacker_time = None
 
         for actor, filename in [('attacker', 'agent-metadata.jsonl'),
                                 ('defender', 'http-app-metadata.jsonl')]:
@@ -70,6 +97,15 @@ def load_honeyval(results_path):
             if not log.exists():
                 continue
             for lineno, record in read_jsonl(log):
+                if actor == 'attacker':
+                    t = pd.to_numeric(record.get('time_out'), errors='coerce')
+                    if pd.notna(t):
+                        last_attacker_time = t if last_attacker_time is None else max(last_attacker_time, t)
+                elif (not finished and record.get('event') == 'COMMAND'
+                      and last_attacker_time is not None
+                      and pd.to_numeric(record.get('time_in'), errors='coerce') > last_attacker_time):
+                    dropped_pending += 1
+                    continue
                 # A statement is a single original log record.
                 statements.append({
                     **record,
@@ -95,6 +131,8 @@ def load_honeyval(results_path):
             **factors,
             'app': app,
             'run': run,
+            'task_dir': str(task_dir.relative_to(results_path)),
+            'trajectory_finished': finished,
             'agent_success': success.get('agent_success'),
             'agent_giveup': success.get('agent_giveup'),
             'callback_success': success.get('callback_success'),
@@ -109,8 +147,15 @@ def load_honeyval(results_path):
             'defender_model_time_seconds': defender.get('total_interaction_time'),
         })
 
+    if skipped_unfinished:
+        print(f'INFO: skipped {len(skipped_unfinished)} unfinished trajectories '
+              '(no "Task finished" in task.log); use --include-unfinished to keep them')
+    if dropped_pending:
+        print(f'INFO: dropped {dropped_pending} defender calls from unfinished final steps')
     df_statements = pd.DataFrame(statements)
     df_interactions = pd.DataFrame(interaction_rows)
+    if df_interactions.empty:
+        raise ValueError(f'No finished trajectories under {results_path}')
     if df_statements.empty:
         raise ValueError('No statement records were loaded')
 
@@ -313,13 +358,22 @@ def load_honeyval(results_path):
         (df_statements['actor'] == 'defender') &
         (df_statements['event'] == 'COMMAND')
     ].groupby('interaction_id').size().rename('n_defender_log_rounds')
+    # Honeyval's own defender round count is every metadata event except
+    # START, END and ERROR, so rate-limited requests (RATE_LIMIT_ERROR) count
+    # as received requests. Compare like with like.
+    defender_request_counts = df_statements[
+        (df_statements['actor'] == 'defender') &
+        df_statements['event'].isin(['COMMAND', 'RATE_LIMIT_ERROR'])
+    ].groupby('interaction_id').size().rename('n_defender_requests')
     df_interactions = df_interactions.join(attacker_counts, on='interaction_id')
     df_interactions = df_interactions.join(defender_raw_counts, on='interaction_id')
+    df_interactions = df_interactions.join(defender_request_counts, on='interaction_id')
     # A missing group in groupby means zero observed rounds, not an
     # automatic mismatch. Preserve missing official metrics as NA.
+    observed_cols = {'attacker': 'n_attacker_log_rounds', 'defender': 'n_defender_requests'}
     for actor in ('attacker', 'defender'):
         actual = pd.to_numeric(
-            df_interactions[f'n_{actor}_log_rounds'], errors='coerce'
+            df_interactions[observed_cols[actor]], errors='coerce'
         ).fillna(0)
         official = pd.to_numeric(
             df_interactions[f'{actor}_rounds'], errors='coerce'
@@ -339,10 +393,8 @@ def load_honeyval(results_path):
     df_interactions = df_interactions.join(counts, on='interaction_id')
     df_interactions = df_interactions.join(exchanges_counts, on='interaction_id')
     df_interactions = df_interactions.join(defender_counts, on='interaction_id')
-    df_interactions['combined_cost_usd'] = (
-        df_interactions['attacker_cost_usd'].fillna(0) +
-        df_interactions['defender_cost_usd'].fillna(0)
-    )
+    # No combined cost here: a missing official cost must stay missing, not
+    # become $0. interaction_metrics.py computes costs from the token logs.
 
     # A discrepancy means the log or linking is incomplete. Keep the data
     # available for inspection rather than silently treating it as complete.
