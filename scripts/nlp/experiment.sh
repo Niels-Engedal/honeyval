@@ -123,9 +123,9 @@ case "$MODE" in
     fi
 
     STAMP="$(date +%Y%m%d-%H%M%S)"
-    ask NAME "Experiment name" "nlp-astra-vs-luna-$STAMP"
+    ask NAME "Experiment name" "nlp-dsabl-vs-luna-$STAMP"
     ask APPS_TEXT "Benchmark apps (space separated, or 'all')" "Login Forum"
-    ask ATTACKER "Attacker model" "openai/gpt-6-astra-python-curl"
+    ask ATTACKER "Attacker model" "nearai/deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated-python-curl"
     ask DEFENDER "Defender model" "openai/gpt-6-luna"
     ask PENTEST_PROMPT "Attacker prompt (exploit/exploit-detect/exploit-detect-hide)" "exploit"
     ask HONEYPOT_PROMPTS_TEXT "Defender instructions (one or more, e.g. 'mislead vulnerable')" "mislead"
