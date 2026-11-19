@@ -73,7 +73,7 @@ def test_strategy_separate_from_executed_action():
     assert audit["strategy_source"] == "contemporaneous"
     assert audit["strategy_attempts"] == 1 and audit["strategy_retried"] is False
     assert audit["strategy_initial_response"] == raw
-    assert audit["strategy_prompt_version"] == "strategic-rationale-v2"
+    assert audit["strategy_prompt_version"] == "strategic-rationale-v3"
     assert usage["input_tokens"] == 10
 
 

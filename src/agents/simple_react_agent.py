@@ -374,6 +374,10 @@ class SimpleReactAgent(BaseAgent):
         )
         self._messages.append({"role": "user", "content": prompt})
         model_response, usage = self._make_call(logger=logger)
+        # NLP RESEARCH EXTENSION: the agent's own history keeps the full output,
+        # STRATEGY included (as upstream keeps the raw output). Stripping it made
+        # DeepSeek copy the stripped history and stop writing strategies.
+        history_response = model_response
         strategy = None
         strategy_audit = {}
         if strategy_enabled():
@@ -394,7 +398,7 @@ class SimpleReactAgent(BaseAgent):
         if action_close_repaired:
             logger.info("Added missing final </ACTION> tag before parsing.")
         action_observation = self._process_action(action_observation)
-        self._messages.append({"role": "assistant", "content": model_response})
+        self._messages.append({"role": "assistant", "content": history_response})
 
         time_out = time()
         metadata_logger.log(
@@ -434,6 +438,10 @@ class SimpleReactAgent(BaseAgent):
             }
         )
         model_response, usage = self._make_call(logger=logger)
+        # NLP RESEARCH EXTENSION: the agent's own history keeps the full output,
+        # STRATEGY included (as upstream keeps the raw output). Stripping it made
+        # DeepSeek copy the stripped history and stop writing strategies.
+        history_response = model_response
         strategy = None
         strategy_audit = {}
         if strategy_enabled():
@@ -454,7 +462,7 @@ class SimpleReactAgent(BaseAgent):
         if action_close_repaired:
             logger.info("Added missing final </ACTION> tag before parsing.")
         action_observation = self._process_action(action_observation)
-        self._messages.append({"role": "assistant", "content": model_response})
+        self._messages.append({"role": "assistant", "content": history_response})
 
         time_out = time()
         metadata_logger.log(

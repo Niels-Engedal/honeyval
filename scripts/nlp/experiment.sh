@@ -124,14 +124,17 @@ case "$MODE" in
 
     STAMP="$(date +%Y%m%d-%H%M%S)"
     ask NAME "Experiment name" "nlp-dsabl-vs-luna-$STAMP"
-    ask APPS_TEXT "Benchmark apps (space separated, or 'all')" "Login Forum"
+    # One app per goal type: command injection, SQL injection, admin password
+    # overwrite, local storage exfiltration.
+    ask APPS_TEXT "Benchmark apps (space separated, or 'all')" "Calculator CreditCardService Login Recipes"
     ask ATTACKER "Attacker model" "nearai/deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated-python-curl"
     ask DEFENDER "Defender model" "openai/gpt-6-luna"
     ask PENTEST_PROMPT "Attacker prompt (exploit/exploit-detect/exploit-detect-hide)" "exploit"
-    ask HONEYPOT_PROMPTS_TEXT "Defender instructions (one or more, e.g. 'mislead vulnerable')" "mislead"
+    ask HONEYPOT_PROMPTS_TEXT "Defender instructions (one or more, e.g. 'mislead vulnerable')" "vulnerable"
     ask SAMPLES "Samples per app" "1"
-    ask STEPS "Maximum attacker steps" "8"
-    ask WORKERS "Parallel workers (concurrent trajectories; start with 2-4)" "2"
+    ask STEPS "Maximum attacker steps" "50"
+    ask WORKERS "Parallel workers (concurrent trajectories; start with 2-4)" "3"
+    ask RATE_LIMIT "Honeypot rate limit (requests per minute per honeypot; -1 = none)" "10"
     ask ATTACKER_EFFORT "Attacker reasoning effort" "medium"
     ask DEFENDER_EFFORT "Defender reasoning effort" "low"
     ask ATTACKER_LIMIT "Attacker cost limit in USD per trajectory" "5"
@@ -140,6 +143,9 @@ case "$MODE" in
     [[ "$NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "Invalid experiment name" >&2; exit 2; }
     [[ "$SAMPLES" =~ ^[1-9][0-9]*$ && "$STEPS" =~ ^[1-9][0-9]*$ && "$WORKERS" =~ ^[1-9][0-9]*$ ]] || {
       echo "Samples, steps and workers must be positive integers" >&2; exit 2;
+    }
+    [[ "$RATE_LIMIT" =~ ^(-1|[1-9][0-9]*)$ ]] || {
+      echo "Rate limit must be a positive integer or -1" >&2; exit 2;
     }
     [[ "$ATTACKER_LIMIT" =~ ^[0-9]+([.][0-9]+)?$ && "$DEFENDER_LIMIT" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
       echo "Cost limits must be nonnegative numbers" >&2; exit 2;
@@ -197,6 +203,7 @@ case "$MODE" in
     echo "Apps: ${APPS[*]} ($APP_COUNT app(s)) | $SAMPLES samples/app | $STEPS max steps"
     echo "Attacker prompt: $PENTEST_PROMPT"
     echo "Parallel workers per condition: $WORKERS (each worker runs one trajectory)"
+    echo "Honeypot rate limit: $RATE_LIMIT requests/minute (-1 = none; Honeyval default 50)"
     echo "Defender instruction conditions: ${HONEYPOT_PROMPTS[*]}"
     echo "Planned: $PROMPT_COUNT sequential Honeyval run(s), up to $TOTAL_TRAJECTORIES trajectories total."
     echo "Each condition has its own results configuration directory under results/$NAME/."
@@ -226,6 +233,7 @@ case "$MODE" in
         --honeypot_additional_instructions "$prompt" \
         --n_samples "$SAMPLES" \
         --max_workers "$WORKERS" \
+        --honeypot_rate_limit "$RATE_LIMIT" \
         --pentest_max_steps "$STEPS" \
         --pentest_timeout 600 \
         --pentest_reasoning_effort "$ATTACKER_EFFORT" \

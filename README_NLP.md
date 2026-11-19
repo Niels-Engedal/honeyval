@@ -6,7 +6,7 @@ Our fork of [Google Research Honeyval](https://github.com/google-research/honeyv
 
 UCloud keeps `/work` between jobs but wipes `/home/ucloud`. Code, results and keys live under `/work/honeyval_project`; Miniconda, Docker and the Conda env must be reinstalled on a new VM. Restart the same VM when you can.
 
-Keys go in `/work/honeyval_project/.secrets/honeyval.env` (permission 600, never committed):
+Keys go in `/work/honeyval_project/.secrets/honeyval.env` (never committed to git):
 
 ```bash
 OPENAI_API_KEY=...
@@ -59,19 +59,24 @@ bash scripts/nlp/experiment.sh    # choose 3) Manual setup
 
 The manual menu asks for each setting and shows the planned number of trajectories before starting. Defaults: attacker `nearai/deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated-python-curl`, defender `openai/gpt-6-luna`. Typical answers:
 
-| Question | Example |
+| Question | Default / example |
 | --- | --- |
 | Experiment name | a new name per run, e.g. `nlp-dsabl-vs-luna-20261119` |
-| Benchmark apps | `all` (16 apps) or e.g. `Login Calculator` |
+| Benchmark apps | `Calculator CreditCardService Login Recipes`: one app per goal type (command injection, SQL injection, admin password overwrite, local storage exfiltration). `all` selects all 16. |
 | Attacker prompt | `exploit-detect` |
-| Defender instructions | `mislead vulnerable` (each condition runs as its own experiment, one after the other) |
+| Defender instructions | `vulnerable`; `vulnerable mislead` runs both, each as its own experiment, one after the other |
 | Samples per app | `3` |
-| Maximum attacker steps | `50`–`100` |
-| Parallel workers | `6` |
+| Maximum attacker steps | `50`, the upstream default and the iteration cap the Honeyval paper used for its ReAct agent |
+| Parallel workers | `3` |
+| Honeypot rate limit | `10` requests/minute per honeypot; `-1` turns it off. Upstream default is 50. |
+
+The paper's ~80 "requests per interaction" counts HTTP requests, not attacker steps. One step can send many requests through a script: v2 averaged about 6.5 defender calls per step.
 
 To preview the commands without running anything: `HONEYVAL_DRY_RUN=1 bash scripts/nlp/experiment.sh`. For full control, pass CLI flags straight through: `bash scripts/nlp/experiment.sh manual --mode run --meta_experiment_type ...`.
 
 **Run time and limits.** The defender keeps the whole session history in its prompt (upstream design), so its tokens per call grow during a trajectory and the total grows roughly with the square of the step cap. Throughput is capped by the OpenAI tokens-per-minute limit (2M/min for Luna on our account), not by worker count. Above about 6 workers, calls fail and the attacker sees HTTP 500s or timeouts. Don't run anything else on the same OpenAI account during a run. Cost limits apply per trajectory; there is no cap for the whole batch.
+
+**Honeypot rate limit.** Above the limit the honeypot answers HTTP 429 without calling the defender LLM, like a rate-limited real service. Because each request waits for Luna, a trajectory peaked at about 20 requests/minute in v2. At 50/min the limit never fired; at 10/min it would have cut roughly 10–25% of defender calls in a replay of v2 traffic (Compiler barely changes). It's a setting of the experiment: report it, and keep it the same across conditions you compare.
 
 **Before starting, check nothing else is running:**
 
@@ -116,7 +121,8 @@ Record the Git commit hash with every dataset. Logs may contain sensitive conten
 Our code changes are marked `NLP RESEARCH EXTENSION`.
 
 **Measurement**
-- **Strategy logging** ([src/utils/strategy_logging.py](src/utils/strategy_logging.py), on by default through the launcher, `HONEYVAL_LOG_STRATEGY=1`). Attacker and defender are asked to write a 3–5 sentence `<STRATEGY>` before each action or response. It's taken from the first generation (never regenerated) and stripped before normal processing. Metadata records `strategy`, `strategy_valid`, `strategy_source` and `strategy_prompt_version` (currently `strategic-rationale-v2`). These are elicited self-reports, not hidden reasoning. Earlier pilots used other protocols, so don't pool them with v2.
+- **Strategy logging** ([src/utils/strategy_logging.py](src/utils/strategy_logging.py), on by default through the launcher, `HONEYVAL_LOG_STRATEGY=1`). Attacker and defender are asked to write a 3–5 sentence `<STRATEGY>` before each action or response. It's taken from the first generation (never regenerated) and stripped before normal processing. Metadata records `strategy`, `strategy_valid`, `strategy_source` and `strategy_prompt_version` (currently `strategic-rationale-v3`). These are elicited self-reports, not hidden reasoning. Earlier pilots used other protocols; don't pool versions.
+- **The attacker's history keeps its strategies** (v3). The attacker's own conversation history stores its full output, `<STRATEGY>` included, as upstream stores the raw output. Under v2 we stripped it, and DeepSeek stopped writing strategies after 3–5 steps (15% coverage in v2, against 99% for the defender). The defender's history still has strategies stripped. Its coverage was already 99%, and keeping them would grow every defender call.
 - **Defender `raw_response`** is saved in `http-app-metadata.jsonl`.
 - **Upstream prompts are unchanged.** The strategy instructions are inserted next to the ACTION/RESPONSE format examples; the `exploit`, `mislead` and other behavioural prompts in [src/benchmark_prompts.py](src/benchmark_prompts.py) are untouched.
 
@@ -136,4 +142,4 @@ Our code changes are marked `NLP RESEARCH EXTENSION`.
 - `scripts/nlp/`: `setup.sh`, `experiment.sh`, `run_honeyval.sh` (loads keys, then runs `src/main.py`) and `preflight_images.py`.
 - Analysis: `scripts/nlp/analysis_scripts/01_preproc.py` and [nlp_research_scripts/](nlp_research_scripts/README.md). `turftopic` was removed from `env.yaml` because it conflicts with `rich`; install analysis-only packages where you analyse, e.g. `python -m pip install sentence-transformers 'turftopic==0.28.0' 'rich==13.9.4'`.
 - Human annotation: [annotation/potato/](annotation/potato/) (`python annotation/potato/prepare_dataset.py --help`).
-- Tests: `tests/test_action_parsing.py`, `test_strategy_logging.py`, `test_experiment_launcher.py` and `test_preflight_images.py`.
+- Tests: `tests/test_action_parsing.py`, `test_attacker_history.py`, `test_strategy_logging.py`, `test_experiment_launcher.py` and `test_preflight_images.py`.

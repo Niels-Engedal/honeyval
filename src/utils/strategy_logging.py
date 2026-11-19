@@ -13,7 +13,9 @@ import re
 # Prompts are a MEASUREMENT intervention: do not change the defender's
 # benchmark-level 'mislead' behavioral goal at the same time.
 # The version is recorded with every decision so pilot protocols can be separated.
-STRATEGY_PROMPT_VERSION = "strategic-rationale-v2"
+# v3 (2026-11-19): same prompt text as v2, but the attacker's conversation
+# history now keeps its own STRATEGY blocks (the defender's history does not).
+STRATEGY_PROMPT_VERSION = "strategic-rationale-v3"
 
 ATTACKER_STRATEGY_INSTRUCTION = (
     "NLP RESEARCH EXTENSION — OUTPUT FORMAT FOR EVERY DECISION:\n"

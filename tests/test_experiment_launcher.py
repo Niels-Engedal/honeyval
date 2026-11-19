@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "scripts/nlp/experiment.sh"
 
-# The thirteen answers in the order manual setup requests them.
+# The fourteen answers in the order manual setup requests them.
 DEFAULT_ANSWERS = [
     "nlp-launcher-unit-test",
     "all",
@@ -20,6 +20,7 @@ DEFAULT_ANSWERS = [
     "10",
     "20",
     "4",
+    "10",
     "medium",
     "medium",
     "5",
@@ -30,7 +31,7 @@ DEFAULT_ANSWERS = [
 def dry_run(**overrides):
     names = [
         "name", "apps", "attacker", "defender", "pentest",
-        "defender_conditions", "samples", "steps", "workers", "attacker_effort",
+        "defender_conditions", "samples", "steps", "workers", "rate_limit", "attacker_effort",
         "defender_effort", "attacker_limit", "defender_limit",
     ]
     answers = dict(zip(names, DEFAULT_ANSWERS))
@@ -57,6 +58,7 @@ class ExperimentLauncherTests(unittest.TestCase):
         self.assertIn("--benchmark_apps all", result.stdout)
         self.assertIn("Parallel workers per condition: 4", result.stdout)
         self.assertEqual(result.stdout.count("--max_workers 4"), 2)
+        self.assertEqual(result.stdout.count("--honeypot_rate_limit 10"), 2)
         self.assertIn("--honeypot_additional_instructions mislead", result.stdout)
         self.assertIn("--honeypot_additional_instructions vulnerable", result.stdout)
         self.assertIn("attacker USD 5 and defender USD 2", result.stdout)
@@ -86,6 +88,18 @@ class ExperimentLauncherTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
                 self.assertIn("Samples, steps and workers must be positive integers", result.stderr)
                 self.assertNotIn("DRY RUN: nothing started.", result.stdout)
+
+    def test_rate_limit_can_be_disabled(self):
+        result = dry_run(apps="Login", defender_conditions="vulnerable", rate_limit="-1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("--honeypot_rate_limit -1", result.stdout)
+
+    def test_invalid_rate_limit_rejected(self):
+        for rate_limit in ("0", "-2", "ten", "1.5"):
+            with self.subTest(rate_limit=rate_limit):
+                result = dry_run(rate_limit=rate_limit)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("Rate limit must be", result.stderr)
 
     def test_duplicate_condition_rejected(self):
         result = dry_run(defender_conditions="mislead mislead")
