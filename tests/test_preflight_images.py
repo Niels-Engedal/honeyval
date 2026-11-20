@@ -34,6 +34,24 @@ class PreflightImageTests(unittest.TestCase):
         self.assertIn("apk add curl bash", images[1][1])
         self.assertIn("pip3 install requests", images[1][1])
 
+    def test_rule_based_adds_baxbench_image(self):
+        images = preflight.image_definitions(names=preflight.REQUIRED + preflight.RULE_BASED)
+        self.assertEqual(
+            [tag for tag, _ in images],
+            ["fastapi-webapp-base", "sandbox", "baxbench-fastapi-webapp"],
+        )
+        baxbench = images[2][1]
+        self.assertIn("archive.debian.org/debian-security", baxbench)
+        # The fix runs before upstream's first apt-get step.
+        self.assertLess(baxbench.index("archive.debian.org"), baxbench.index("apt-get update"))
+        self.assertNotIn("archive.debian.org", images[0][1] + images[1][1])
+
+    @mock.patch.object(preflight.subprocess, "run")
+    def test_rule_based_checks_three_images(self, run):
+        run.return_value = ok()
+        preflight.ensure_images(rule_based=True)
+        self.assertEqual(run.call_count, 4)  # docker info + three inspects
+
     @mock.patch.object(preflight.subprocess, "run")
     def test_existing_images_skip_all_builds(self, run):
         run.return_value = ok()

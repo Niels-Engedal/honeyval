@@ -157,7 +157,8 @@ Our code changes are marked `NLP RESEARCH EXTENSION`.
 
 **Robustness**
 - Honeypot cleanup no longer crashes when a container failed to start, and task errors are logged with full tracebacks.
-- The launcher builds the two Docker images (`fastapi-webapp-base`, `sandbox`) once before any worker starts, and refuses to run unless the sandbox firewall (`DOCKER-USER`) can be inspected.
+- The launcher builds the two Docker images (`fastapi-webapp-base`, `sandbox`) once before any worker starts, and refuses to run unless the sandbox firewall (`DOCKER-USER`) can be inspected. With `--honeypot_type rule-based` it also builds `baxbench-fastapi-webapp`.
+- **BaxBench image fix:** that image is based on Debian bullseye, whose security updates moved to `archive.debian.org` after its end of life, so upstream's build fails with a 404 on `sqlite3`. The preflight adds one line pointing apt at the archive. The packages and the app code are unchanged.
 
 **Tooling** (no effect on the experiments)
 - `scripts/nlp/`: `setup.sh`, `experiment.sh`, `run_honeyval.sh` (loads keys, then runs `src/main.py`) and `preflight_images.py`.

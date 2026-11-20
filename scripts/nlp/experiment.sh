@@ -58,12 +58,16 @@ run_command() {
   # allowing 16 simultaneous pip downloads to fail and count as task progress.
   # For direct CLI passthrough, only preflight actual HTTP-app runs; evaluation
   # and metrics-only commands must remain offline and avoid Docker builds.
-  local mode="" tasks_specified=0 needs_http_app=0 arg i j
+  local mode="" tasks_specified=0 needs_http_app=0 rule_based="" arg i j
   local -a args=("$@")
   for ((i=0; i<${#args[@]}; i++)); do
     case "${args[i]}" in
       --mode)
         mode="${args[i+1]:-}"
+        ;;
+      --honeypot_type)
+        # The rule-based honeypot needs the BaxBench image as well.
+        if [[ "${args[i+1]:-}" == "rule-based" ]]; then rule_based="--rule-based"; fi
         ;;
       --benchmark_tasks)
         tasks_specified=1
@@ -77,7 +81,7 @@ run_command() {
   # Omitting --benchmark_tasks tells Honeyval to run all task types.
   if (( ! tasks_specified )); then needs_http_app=1; fi
   if [[ "$mode" == "run" && "$needs_http_app" == "1" && "$IMAGE_PREFLIGHT_DONE" == "0" ]]; then
-    python3 scripts/nlp/preflight_images.py
+    python3 scripts/nlp/preflight_images.py $rule_based
     IMAGE_PREFLIGHT_DONE=1
   fi
 
