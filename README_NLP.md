@@ -137,6 +137,8 @@ Unfinished trajectories are skipped unless you pass `--include-unfinished`. Besi
 
 The script prints a warning when failed calls, cost-limit hits, task errors or low strategy coverage would contaminate the data.
 
+Findings from the first vulnerable run, cost projections and the plan for judge-guided prompt optimization: [docs/nlp_run1_findings_and_plan.md](docs/nlp_run1_findings_and_plan.md).
+
 ## 4. What we changed compared to upstream
 
 Our code changes are marked `NLP RESEARCH EXTENSION`.
