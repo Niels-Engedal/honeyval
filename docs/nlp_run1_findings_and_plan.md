@@ -137,3 +137,67 @@ Per arm. The cost depends on how long each prompt keeps the attacker engaged.
 - **Sample sizes:**
   - 100 per arm is enough for interaction length;
   - about 190–250 per arm is needed for detection.
+
+
+---
+
+## 6. Independent review — ChatGPT (2026-11-24)
+
+This section records a second methodological perspective for discussion, not an agreed replacement for Claude's sections 1–5. The project team's stated MVP constraints are one optimizer iteration, two experimental conditions, and no analysis of within-interaction temporal evolution.
+
+### 6.1 Interpretation of Run 1
+
+- The main empirical finding is the economic trade-off between engagement and defender expenditure. Recipes accounts for approximately 98% of defender costs. Excluding Recipes illustratively changes the ratio of aggregate attacker to defender expenditure from 0.35 to about 5.95 (using rounded reported costs). This is evidence of app dependence, not a justification for deleting unfavorable observations.
+- The full-history architecture can generate quadratic cumulative input-token usage under constant history increments and uncached input assumptions; the actual monetary cost depends on caching, pricing, response lengths and call frequency. The observed trade-off is not a universal law that every longer interaction necessarily has worse cost advantage.
+- Strategy coverage of 98–99% is encouraging for feasibility, but coverage is not evidence that elicited rationales faithfully represent internal reasoning.
+- **Billing clarification from the project team:** the approximately $16 account-level OpenAI expenditure included other runs. This explains the discrepancy with the $8.05 attributed to Run 1; it should not be treated as evidence of a missing long-context surcharge. Continue to document token pricing and distinguish trajectory operating costs from offline judge/optimizer expenditure.
+- Login is the recommended MVP app because of cost, runtime, context size and observed behavioral variation. CreditCardService is a plausible alternative if richer interactions are needed. Recipes is scientifically interesting but unsuitable for the immediate MVP because of its resource demands and infrastructure-related failures. App selection is a development decision; report it and do not claim cross-app generalization.
+
+### 6.2 Primary outcome: retain the poster's economic hypothesis
+
+Unlike section 3, this review recommends retaining **defender cost advantage** as the primary endpoint, rather than replacing it with request count. The observed conflict between engagement and expenditure is precisely why the economic endpoint matters.
+
+- Primary: Honeyval's ratio of total attacker operating cost to total defender operating cost, per condition.
+- Secondary: absolute attacker and defender expenditure, request count, detection, attack success/give-up, and functional fidelity (Pass@1, if feasible).
+- Judge scores are exploratory mechanism checks and optimization inputs, not independent evidence of success. A better cost ratio alone is not necessarily useful if attacker expenditure or functional fidelity collapses.
+- Freeze the outcome definition and analysis before the fresh evaluation. Use the same cost accounting, model settings, caps, logging protocol and rate limits across the two arms. Predefine treatment of infrastructure failures, legitimate rate limits and cost/step caps; report termination reasons and sensitivity analyses where appropriate.
+
+### 6.3 Baseline strength and Honeyval's existing prompt design
+
+The upstream instructions are not arbitrary or empty baselines. They are research-engineered defensive prompts. See [the original Honeyval paper, sections 5.2 and F.2](https://arxiv.org/html/2605.29963v2) and [our prompt definitions](../src/benchmark_prompts.py). Honeyval experimentally compares several prompting strategies; this does not establish that each prompt was iteratively optimized, let alone optimized for the present model pair, app, cost structure or B/E rubric.
+
+The existing `vulnerable` strategy already targets perceived attacker progress, and `mislead` explicitly targets engagement and credible API-consistent behavior. Thus the conceptual ingredients of Believability and Enticingness are already present in the upstream work. Our contribution is their operationalization as perspective-dependent measurements and the use of these measurements as feedback in a reproducible optimization procedure, not the invention of those defensive objectives.
+
+For the MVP, use exactly two arms: the original `vulnerable` instructions and one revised version of those instructions. This directly uses the existing development data. A `mislead` baseline is defensible as a stronger engagement-oriented comparator but would ideally have its own development dataset if the research question is improvement over that particular prompt. Do not add a third arm given the stated scope. Describe the comparator as the original or upstream research-engineered prompt, not a random, naive, or demonstrably globally optimized prompt.
+
+Limitation: the two-arm design evaluates the combined intervention (judge feedback plus prompt rewriting). It cannot isolate the additional contribution of B/E over ordinary LLM-based rewriting, nor establish superiority over all other Honeyval strategies. The upstream prompts being research-engineered makes the comparator meaningful but does not eliminate the need for such an ablation in future work.
+
+### 6.4 Minimal judge and analysis
+
+- Retain exactly two constructs and two perspectives: attacker-perceived Believability and Enticingness, and defender-estimated conveyed Believability and Enticingness. These are model-based estimates of perspectives, not ground truth about internal representations.
+- Use a fixed, versioned rubric with anchored scores, short evidence-based justifications, and an explicit missing/not assessable option. Do not add separate intent, execution, or strategy–action consistency scales unless needed to resolve a concrete rubric problem.
+- Decide between role-matched judges and one independent judge before the main scoring run. Role-matched judges fit the original perspective-reconstruction rationale but carry self-preference and calibration concerns; an independent judge simplifies shared calibration but does not reproduce an agent's own perspective. No comparison of judging architectures is required for the MVP.
+- Score only information available to the relevant agent at the evaluated point; do not reveal future outcomes or private opponent strategies to the attacker-perspective judge. Align observations using actual exchange/request identifiers and visible tool output, not a naive one-to-one attacker-step/defender-call mapping (one action can cause multiple requests). Distinguish perceived progress conveyed by the current exchange from cumulative goal attainment.
+- No temporal-evolution analysis. Aggregate scores to one row per trajectory; consider a fixed early window or equal weighting of attacker-visible exchanges to reduce length confounding. Discrepancies between perspectives are exploratory, especially if different judge models are used. Do not treat individual statements as independent replicates for trajectory-level outcomes.
+- A small manual sanity check (e.g., 20–30 deliberately varied items) and a fixed rubric are more realistic than 200–300 formal human annotations. Label this as a qualitative check, not a formal validation of construct validity. Cache calls and measure offline costs.
+- Explore simple associations (e.g., Spearman correlations) with outcomes; distinguish apps in plots and avoid treating pooled cross-app associations as within-app effects. With only 10 Login trajectories, statistical power is very limited. Do not require a significant exploratory association as a gate for the optimizer. Qualitative feedback may still be useful, and a negative outcome is informative.
+
+### 6.5 One-step optimization and independent evaluation
+
+Use the existing Run 1 as discovery/development data. Implement a single versioned prompt-revision step, record its inputs and output hash, and freeze the revision before collecting fresh evaluation data. A pilot may be used for operational checks and cost estimates, not to select revisions on the final evaluation outcome. No additional optimization iteration or temporal analysis is required.
+
+Collect fresh baseline and revised-prompt trajectories on Login using the same configuration, preferably interleaved or randomized in execution order to reduce provider/time effects. Use an affordable fixed sample size (e.g., 50–100 per arm); this is a practical allocation, not a power guarantee. The 50-step cap differs from Run 1's 100-step cap and must be identical between the fresh arms and documented.
+
+For the primary metric, let R = sum(attacker cost) / sum(defender cost) within each arm. Report R for both arms and the ratio R_optimized / R_baseline (or its log). Bootstrap whole trajectories within each arm, preserving paired attacker/defender cost within a trajectory, for an uncertainty interval. Report absolute costs and the influence of extreme observations. Mann–Whitney U can supplement descriptive length comparisons; Fisher's exact test can be used for rare binary outcomes, with detection explicitly exploratory at these sample sizes. A significance claim requires a prespecified analysis; effect sizes and uncertainty are valuable even if no significant improvement is detected.
+
+### 6.6 Remaining deliverables and decision points
+
+1. Implement the fixed-rubric judge, test alignment and perform the small sanity check.
+2. Score development data within budget; produce trajectory-level summaries and simple exploratory analyses.
+3. Implement custom prompt support and one reproducible optimizer invocation; document and freeze the revised prompt.
+4. Run the two fresh conditions and compare objective outcomes with uncertainty.
+5. Report limitations: one application/model pairing, single iteration (no convergence claim), limited construct validation, no generic-optimization ablation, and elicited rather than hidden reasoning.
+
+Central research question: Can agent-perspective estimates of Believability and Enticingness inform a single prompt revision that improves the measured defensive performance of a generative honeypot in a controlled Honeyval setting?
+
+The proof of concept is worthwhile even if the revision does not improve performance. Do not interpret an unsuccessful single revision as a universal failure of the constructs, or a successful revision as validation of the constructs themselves. Scope should now be frozen around completing the end-to-end loop once.
